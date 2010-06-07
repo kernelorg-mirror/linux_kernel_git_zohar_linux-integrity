@@ -25,6 +25,15 @@
 
 #include "ima.h"
 
+int ima_template = IMA_NG_TEMPLATE;
+static int __init ima_template_setup(char *str)
+{
+	if (strncmp(str, "ima", 3) == 0)
+		ima_template = IMA_TEMPLATE;
+	return 1;
+}
+__setup("ima_template=", ima_template_setup);
+
 static int valid_policy = 1;
 #define TMPBUFLEN 12
 static ssize_t ima_show_htable_value(char __user *buf, size_t count,
@@ -88,8 +97,7 @@ static void *ima_measurements_next(struct seq_file *m, void *v, loff_t *pos)
 	 * against concurrent list-extension
 	 */
 	rcu_read_lock();
-	qe = list_entry_rcu(qe->later.next,
-			    struct ima_queue_entry, later);
+	qe = list_entry_rcu(qe->later.next, struct ima_queue_entry, later);
 	rcu_read_unlock();
 	(*pos)++;
 
@@ -111,6 +119,7 @@ static void ima_putc(struct seq_file *m, void *data, int datalen)
  *       char[20]=template digest
  *       32bit-le=template name size
  *       char[n]=template name
+ *       [eventdata length]
  *       eventdata[n]=template specific data
  */
 static int ima_measurements_show(struct seq_file *m, void *v)
@@ -142,6 +151,9 @@ static int ima_measurements_show(struct seq_file *m, void *v)
 
 	/* 4th:  template name */
 	ima_putc(m, (void *)e->template_name, namelen);
+
+	if (ima_template != IMA_TEMPLATE)
+		ima_putc(m, &e->template_len, sizeof e->template_len);
 
 	/* 5th:  template specific data */
 	ima_template_show(m, (struct ima_template_data *)&e->template_data,

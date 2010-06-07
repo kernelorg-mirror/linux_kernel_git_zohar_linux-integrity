@@ -18,9 +18,8 @@
 #include <linux/fs.h>
 #include <linux/xattr.h>
 #include <linux/evm.h>
+#include <crypto/hash_info.h>
 #include "ima.h"
-
-static const char *IMA_TEMPLATE_NAME = "ima";
 
 /*
  * ima_store_template - store ima template measurements
@@ -221,13 +220,23 @@ void ima_store_measurement(struct integrity_iint_cache *iint,
 	struct ima_template_entry *entry;
 	struct ima_template_data *template_data;
 	int entry_len;
+	int template_len;
+	int filename_len = 0;
 	int violation = 0;
 
 	if (iint->flags & IMA_MEASURED)
 		return;
 
 	entry_len = sizeof(*entry);
-	entry_len += sizeof(*template_data);
+	if (ima_template == IMA_TEMPLATE)
+		template_len = sizeof(*template_data);
+	else {
+		template_len = iint->ima_hash->length;
+		filename_len = strlen(filename);
+		template_len += filename_len + 1;
+	}
+	entry_len += template_len;
+
 	entry = kmalloc(entry_len, GFP_KERNEL);
 	if (!entry) {
 		integrity_audit_msg(AUDIT_INTEGRITY_PCR, inode, filename,
@@ -235,35 +244,51 @@ void ima_store_measurement(struct integrity_iint_cache *iint,
 		return;
 	}
 
-	/* fill in entry header */
-	entry->template_name = IMA_TEMPLATE_NAME;
-	entry->template_len = sizeof(*template_data);
+	switch (ima_template) {
+	case IMA_TEMPLATE:
+		/* fill in entry header */
+		entry->template_name = IMA_TEMPLATE_NAME;
+		entry->template_len = sizeof(*template_data);
 
-	/* fill in 'ima' template data */
-	template_data = (struct ima_template_data *)entry->template_data;
-	memset(template_data, 0, sizeof(*template_data));
-	if (iint->ima_hash->algo != ima_hash_algo) {
-		struct {
-			struct ima_digest_data hdr;
-			char digest[IMA_MAX_DIGEST_SIZE];
-		} hash;
+		/* 'ima' template data */
+		template_data = (struct ima_template_data *)entry->template_data;
+		memset(template_data, 0, sizeof(*template_data));
+		strcpy(template_data->file_name,
+		       (strlen(filename) > IMA_EVENT_NAME_LEN_MAX) ?
+			file->f_dentry->d_name.name : filename);
 
-		hash.hdr.algo = ima_hash_algo;
-		result = ima_calc_file_hash(file, &hash.hdr);
-		if (result)
-			integrity_audit_msg(AUDIT_INTEGRITY_DATA, inode,
-					    filename, "collect_data", "failed",
-					    result, 0);
-		else
-			memcpy(template_data->.digest, hash.hdr.digest,
-			       hash.hdr.length);
-	} else
-		memcpy(template_data->digest, iint->ima_hash->digest,
+		if (iint->ima_hash->algo != ima_hash_algo) {
+			struct {
+				struct ima_digest_data hdr;
+				char digest[IMA_MAX_DIGEST_SIZE];
+			} hash;
+
+			hash.hdr.algo = ima_hash_algo;
+			result = ima_calc_file_hash(file, &hash.hdr);
+			if (result)
+				integrity_audit_msg(AUDIT_INTEGRITY_DATA, inode,
+						    filename, "collect_data",
+						    "failed", result, 0);
+			else
+				memcpy(template_data->digest, hash.hdr.digest,
+			       	       hash.hdr.length);
+		} else
+			memcpy(template_data->digest, iint->ima_hash->digest,
+			       iint->ima_hash->length);
+
+		break;
+	default:
+		/* fill in entry header */
+		entry->template_name = template_hash_name[iint->ima_hash->algo];
+		entry->template_len = template_len; 
+		
+		/* fill in template data */
+		memcpy(entry->template_data, iint->ima_hash->digest,
 		       iint->ima_hash->length);
-
-	strcpy(template_data->file_name,
-	       (strlen(filename) > IMA_EVENT_NAME_LEN_MAX) ?
-	       file->f_dentry->d_name.name : filename);
+		strncpy(entry->template_data + iint->ima_hash->length,
+		       filename, filename_len);
+		*(entry->template_data + template_len -1) = 0;
+	}
 
 	result = ima_store_template(entry, violation, inode);
 	if (!result || result == -EEXIST)

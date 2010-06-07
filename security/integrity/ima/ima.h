@@ -26,6 +26,12 @@
 
 #include "../integrity.h"
 
+extern const char *IMA_TEMPLATE_NAME;
+extern const char *IMA_NG_TEMPLATE_NAME;
+enum ima_template_t { IMA_TEMPLATE, IMA_NG_TEMPLATE };
+extern int ima_template;
+extern const char *const template_hash_name[];
+
 enum ima_show_type { IMA_SHOW_BINARY, IMA_SHOW_ASCII };
 enum tpm_pcrs { TPM_PCR0 = 0, TPM_PCR8 = 8 };
 

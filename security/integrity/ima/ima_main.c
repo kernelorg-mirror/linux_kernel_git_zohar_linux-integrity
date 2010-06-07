@@ -189,7 +189,10 @@ static int process_measurement(struct file *file, const char *filename,
 		goto out_digsig;
 	}
 
-	if (action & IMA_APPRAISE_SUBMASK)
+	if (ima_template == IMA_TEMPLATE) {
+		if (action & IMA_APPRAISE_SUBMASK)
+			xattr_ptr = &xattr_value;
+	} else
 		xattr_ptr = &xattr_value;
 
 	rc = ima_collect_measurement(iint, file, xattr_ptr, &xattr_len);
