@@ -718,10 +718,17 @@ mod_strip_cmd = true
 endif # INSTALL_MOD_STRIP
 export mod_strip_cmd
 
+export KBUILD_MODSIG := 0
 
 ifeq ($(CONFIG_MODULE_SIG),y)
 MODSECKEY = ./signing_key.priv
 MODPUBKEY = ./signing_key.x509
+
+# Use 'make MODSIG=1 modules_install' to use ephemeral keys for module signing
+ifeq ("$(origin MODSIG)", "command line")
+KBUILD_MODSIG := $(MODSIG)
+endif
+
 export MODPUBKEY
 mod_sign_cmd = perl $(srctree)/scripts/sign-file $(MODSECKEY) $(MODPUBKEY)
 else
@@ -957,7 +964,26 @@ modules_prepare: prepare scripts
 
 # Target to install modules
 PHONY += modules_install
+
+# Create an ephemeral keypair before module install
+ifeq ($(KBUILD_MODSIG),1)
+modules_install: _newmodpubkey_
+endif
+
 modules_install: _modinst_ _modinst_post
+
+ifeq ($(KBUILD_MODSIG),1)
+modules_install:  _rmprivkey_
+endif
+
+PHONY += _newmodpubkey_
+_newmodpubkey_: 
+	@rm -f $(MODSECKEY) $(MODPUBKEY)
+	$(Q)$(MAKE) -W kernel/modsign_pubkey.o
+
+PHONY += _rmprivkey_ 
+_rmprivkey_: 
+	@rm -f $(MODSECKEY)
 
 PHONY += _modinst_
 _modinst_:
