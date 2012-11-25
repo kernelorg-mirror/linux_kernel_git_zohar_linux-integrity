@@ -139,7 +139,11 @@ ifeq ($(CONFIG_MODULE_SIG),y)
 extra_certificates:
 	touch $@
 
-kernel/modsign_pubkey.o: signing_key.x509 extra_certificates
+signing_key.x509: FORCE
+	ln -fs $(MODPUBKEY) $@
+	touch $@
+
+kernel/modsign_pubkey.o: $(MODPUBKEY) signing_key.x509 extra_certificates 
 
 ###############################################################################
 #
@@ -168,7 +172,7 @@ ifeq ($(sign_key_with_hash),)
 $(error Could not determine digest type to use from kernel config)
 endif
 
-signing_key.priv signing_key.x509: x509.genkey
+$(MODSECKEY) $(MODPUBKEY): x509.genkey
 	@echo "###"
 	@echo "### Now generating an X.509 key pair to be used for signing modules."
 	@echo "###"
@@ -179,8 +183,8 @@ signing_key.priv signing_key.x509: x509.genkey
 	@echo "###"
 	openssl req -new -nodes -utf8 $(sign_key_with_hash) -days 36500 -batch \
 		-x509 -config x509.genkey \
-		-outform DER -out signing_key.x509 \
-		-keyout signing_key.priv
+		-outform DER -out $(MODPUBKEY) \
+		-keyout $(MODSECKEY)
 	@echo "###"
 	@echo "### Key pair generated."
 	@echo "###"

@@ -721,15 +721,17 @@ export mod_strip_cmd
 export KBUILD_MODSIG := 0
 
 ifeq ($(CONFIG_MODULE_SIG),y)
-MODSECKEY = ./signing_key.priv
-MODPUBKEY = ./signing_key.x509
-
 # Use 'make MODSIG=1 modules_install' to use ephemeral keys for module signing
 ifeq ("$(origin MODSIG)", "command line")
 KBUILD_MODSIG := $(MODSIG)
+MODSECKEY = ./ephemeral_signing_key.priv
+MODPUBKEY = ./ephemeral_signing_key.x509
+else
+MODSECKEY = ./default_signing_key.priv
+MODPUBKEY = ./default_signing_key.x509
 endif
 
-export MODPUBKEY
+export MODPUBKEY MODSECKEY
 mod_sign_cmd = perl $(srctree)/scripts/sign-file $(MODSECKEY) $(MODPUBKEY)
 else
 mod_sign_cmd = true
@@ -1037,7 +1039,9 @@ MRPROPER_DIRS  += include/config usr/include include/generated          \
                   arch/*/include/generated
 MRPROPER_FILES += .config .config.old .version .old_version $(version_h) \
 		  Module.symvers tags TAGS cscope* GPATH GTAGS GRTAGS GSYMS \
-		  signing_key.priv signing_key.x509 x509.genkey		\
+		  default_signing_key.priv default_signing_key.x509	\
+		  ephemeral_signing_key.priv ephemeral_signing_key.x509 \
+		  signing_key.x509 x509.genkey				\
 		  extra_certificates signing_key.x509.keyid		\
 		  signing_key.x509.signer
 
