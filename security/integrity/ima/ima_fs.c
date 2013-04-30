@@ -22,6 +22,8 @@
 #include <linux/rculist.h>
 #include <linux/rcupdate.h>
 #include <linux/parser.h>
+#include <crypto/hash_info.h>
+#include <crypto/sha.h>
 
 #include "ima.h"
 
@@ -156,7 +158,7 @@ static int ima_measurements_show(struct seq_file *m, void *v)
 		ima_putc(m, &e->template_len, sizeof e->template_len);
 
 	/* 5th:  template specific data */
-	ima_template_show(m, (struct ima_template_data *)&e->template_data,
+	ima_template_show(m, e->template_name, e->template_data,
 			  IMA_SHOW_BINARY);
 	return 0;
 }
@@ -188,22 +190,41 @@ static void ima_print_digest(struct seq_file *m, u8 *digest, int size)
 		seq_printf(m, "%02x", *(digest + i));
 }
 
-void ima_template_show(struct seq_file *m, void *e, enum ima_show_type show)
+
+static int get_digest_size(const char *template_name)
 {
-	struct ima_template_data *entry = e;
+	int i;
+
+	for (i = 0; i < HASH_ALGO__LAST; i++) {
+		if (strcmp(template_name, template_hash_name[i]) == 0)
+			return hash_digest_size[i];
+	}
+	if (strcmp(template_name, IMA_TEMPLATE_NAME) == 0)
+		return SHA1_DIGEST_SIZE;
+	return 0;
+}
+
+void ima_template_show(struct seq_file *m, const char *template_name, void *e,
+		       enum ima_show_type show)
+{
+	u8 *template_data = e;
+	char *pathname;
+	int digest_size;
 	int namelen;
 
+	digest_size = get_digest_size(template_name);
 	switch (show) {
 	case IMA_SHOW_ASCII:
-		ima_print_digest(m, entry->digest, IMA_DIGEST_SIZE);
-		seq_printf(m, " %s\n", entry->file_name);
+		ima_print_digest(m, template_data, digest_size);
+		seq_printf(m, " %s\n", (char *)template_data + digest_size);
 		break;
 	case IMA_SHOW_BINARY:
-		ima_putc(m, entry->digest, IMA_DIGEST_SIZE);
+		ima_putc(m, template_data, digest_size);
 
-		namelen = strlen(entry->file_name);
+		pathname = (char *)template_data + digest_size;
+		namelen = strlen(pathname);
 		ima_putc(m, &namelen, sizeof namelen);
-		ima_putc(m, entry->file_name, namelen);
+		ima_putc(m, pathname, namelen);
 	default:
 		break;
 	}
@@ -231,7 +252,7 @@ static int ima_ascii_measurements_show(struct seq_file *m, void *v)
 	seq_printf(m, " %s ", e->template_name);
 
 	/* 4th:  template specific data */
-	ima_template_show(m, (struct ima_template_data *)&e->template_data,
+	ima_template_show(m, e->template_name, e->template_data,
 			  IMA_SHOW_ASCII);
 	return 0;
 }

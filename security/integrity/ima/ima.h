@@ -31,6 +31,7 @@ extern const char *IMA_NG_TEMPLATE_NAME;
 enum ima_template_t { IMA_TEMPLATE, IMA_NG_TEMPLATE };
 extern int ima_template;
 extern const char *const template_hash_name[];
+extern const int template_hash_size[];
 
 enum ima_show_type { IMA_SHOW_BINARY, IMA_SHOW_ASCII };
 enum tpm_pcrs { TPM_PCR0 = 0, TPM_PCR8 = 8 };
@@ -113,7 +114,7 @@ void ima_audit_measurement(struct integrity_iint_cache *iint,
 			   const unsigned char *filename);
 int ima_store_template(struct ima_template_entry *entry, int violation,
 		       struct inode *inode);
-void ima_template_show(struct seq_file *m, void *e, enum ima_show_type show);
+void ima_template_show(struct seq_file *m, const char *, void *e, enum ima_show_type show);
 const char *ima_d_path(struct path *path, char **pathbuf);
 
 /* rbtree tree calls to lookup, insert, delete
