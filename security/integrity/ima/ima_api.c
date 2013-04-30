@@ -319,6 +319,11 @@ void ima_audit_measurement(struct integrity_iint_cache *iint,
 	audit_log_format(ab, "file=");
 	audit_log_untrustedstring(ab, filename);
 	audit_log_format(ab, " hash=");
+	if (ima_template != IMA_TEMPLATE) {
+		audit_log_untrustedstring(ab,
+			hash_algo_name[iint->ima_hash->algo]);
+		audit_log_format(ab, ",");
+	}
 	audit_log_untrustedstring(ab, hash);
 
 	audit_log_task_info(ab, current);
