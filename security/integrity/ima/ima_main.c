@@ -37,11 +37,29 @@ int ima_appraise;
 #endif
 
 int ima_hash_algo = HASH_ALGO_SHA1;
+static int hash_setup_done;
 
 static int __init hash_setup(char *str)
 {
-	if (strncmp(str, "md5", 3) == 0)
-		ima_hash_algo = HASH_ALGO_MD5;
+	int i;
+
+	if (hash_setup_done)
+		return 1;
+
+	if (ima_template == IMA_TEMPLATE) {
+		if (strncmp(str, "sha1", 4) == 0)
+			ima_hash_algo = HASH_ALGO_SHA1;
+		else if (strncmp(str, "md5", 3) == 0)
+			ima_hash_algo = HASH_ALGO_MD5;
+		goto out;
+	}
+
+	for (i = 0; i < HASH_ALGO__LAST; i++) {
+		if (strcmp(str, hash_algo_name[i]) == 0)
+			ima_hash_algo = i;
+	}
+out:
+	hash_setup_done = 1;
 	return 1;
 }
 __setup("ima_hash=", hash_setup);
@@ -306,6 +324,7 @@ static int __init init_ima(void)
 {
 	int error;
 
+	hash_setup(CONFIG_IMA_DEFAULT_HASH);	
 	error = ima_init();
 	if (!error)
 		ima_initialized = 1;
