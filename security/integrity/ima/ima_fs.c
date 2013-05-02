@@ -144,7 +144,7 @@ static int ima_measurements_show(struct seq_file *m, void *v)
 	ima_putc(m, (void *)e->template_name, namelen);
 
 	/* 5th:  template specific data */
-	ima_template_show(m, (struct ima_template_data *)&e->template,
+	ima_template_show(m, (struct ima_template_data *)&e->template_data,
 			  IMA_SHOW_BINARY);
 	return 0;
 }
@@ -219,7 +219,7 @@ static int ima_ascii_measurements_show(struct seq_file *m, void *v)
 	seq_printf(m, " %s ", e->template_name);
 
 	/* 4th:  template specific data */
-	ima_template_show(m, (struct ima_template_data *)&e->template,
+	ima_template_show(m, (struct ima_template_data *)&e->template_data,
 			  IMA_SHOW_ASCII);
 	return 0;
 }

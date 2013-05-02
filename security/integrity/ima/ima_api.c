@@ -50,11 +50,8 @@ int ima_store_template(struct ima_template_entry *entry,
 	} hash;
 
 	memset(entry->digest, 0, sizeof(entry->digest));
-	entry->template_name = IMA_TEMPLATE_NAME;
-	entry->template_len = sizeof(entry->template);
-
 	if (!violation) {
-		result = ima_calc_buffer_hash(&entry->template,
+		result = ima_calc_buffer_hash(&entry->template_data,
 						entry->template_len,
 						&hash.hdr);
 		if (result < 0) {
@@ -80,19 +77,31 @@ void ima_add_violation(struct inode *inode, const unsigned char *filename,
 		       const char *op, const char *cause)
 {
 	struct ima_template_entry *entry;
+	struct ima_template_data *template_data;
+	int entry_len;
 	int violation = 1;
 	int result;
 
 	/* can overflow, only indicator */
 	atomic_long_inc(&ima_htable.violations);
 
-	entry = kmalloc(sizeof(*entry), GFP_KERNEL);
+	entry_len = sizeof(*entry);
+	entry_len += sizeof(*template_data);
+
+	entry = kmalloc(entry_len, GFP_KERNEL);
 	if (!entry) {
 		result = -ENOMEM;
 		goto err_out;
 	}
-	memset(&entry->template, 0, sizeof(entry->template));
-	strncpy(entry->template.file_name, filename, IMA_EVENT_NAME_LEN_MAX);
+
+	entry->template_name = IMA_TEMPLATE_NAME;
+	entry->template_len = sizeof(*template_data);
+
+	/* fill in 'ima' template data */
+	template_data = (struct ima_template_data *)entry->template_data;
+	memset(template_data, 0, sizeof(*template_data));
+	strncpy(template_data->file_name, filename,
+		min((int)strlen(filename), IMA_EVENT_NAME_LEN_MAX));
 	result = ima_store_template(entry, violation, inode);
 	if (result < 0)
 		kfree(entry);
@@ -210,18 +219,29 @@ void ima_store_measurement(struct integrity_iint_cache *iint,
 	int result = -ENOMEM;
 	struct inode *inode = file_inode(file);
 	struct ima_template_entry *entry;
+	struct ima_template_data *template_data;
+	int entry_len;
 	int violation = 0;
 
 	if (iint->flags & IMA_MEASURED)
 		return;
 
-	entry = kmalloc(sizeof(*entry), GFP_KERNEL);
+	entry_len = sizeof(*entry);
+	entry_len += sizeof(*template_data);
+	entry = kmalloc(entry_len, GFP_KERNEL);
 	if (!entry) {
 		integrity_audit_msg(AUDIT_INTEGRITY_PCR, inode, filename,
 				    op, audit_cause, result, 0);
 		return;
 	}
-	memset(&entry->template, 0, sizeof(entry->template));
+
+	/* fill in entry header */
+	entry->template_name = IMA_TEMPLATE_NAME;
+	entry->template_len = sizeof(*template_data);
+
+	/* fill in 'ima' template data */
+	template_data = (struct ima_template_data *)entry->template_data;
+	memset(template_data, 0, sizeof(*template_data));
 	if (iint->ima_hash->algo != ima_hash_algo) {
 		struct {
 			struct ima_digest_data hdr;
@@ -235,12 +255,13 @@ void ima_store_measurement(struct integrity_iint_cache *iint,
 					    filename, "collect_data", "failed",
 					    result, 0);
 		else
-			memcpy(entry->template.digest, hash.hdr.digest,
+			memcpy(template_data->.digest, hash.hdr.digest,
 			       hash.hdr.length);
 	} else
-		memcpy(entry->template.digest, iint->ima_hash->digest,
+		memcpy(template_data->digest, iint->ima_hash->digest,
 		       iint->ima_hash->length);
-	strcpy(entry->template.file_name,
+
+	strcpy(template_data->file_name,
 	       (strlen(filename) > IMA_EVENT_NAME_LEN_MAX) ?
 	       file->f_dentry->d_name.name : filename);
 

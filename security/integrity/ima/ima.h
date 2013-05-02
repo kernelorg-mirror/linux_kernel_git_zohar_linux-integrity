@@ -52,7 +52,7 @@ struct ima_template_entry {
 	u8 digest[TPM_DIGEST_SIZE];	/* sha1 or md5 measurement hash */
 	const char *template_name;
 	int template_len;
-	struct ima_template_data template;
+	char template_data[0];
 };
 
 struct ima_queue_entry {

@@ -42,21 +42,29 @@ int ima_used_chip;
 static void __init ima_add_boot_aggregate(void)
 {
 	struct ima_template_entry *entry;
+	struct ima_template_data *template_data;
 	const char *op = "add_boot_aggregate";
 	const char *audit_cause = "ENOMEM";
 	int result = -ENOMEM;
 	int violation = 1;
+	int entry_len;
 
-	entry = kmalloc(sizeof(*entry), GFP_KERNEL);
+	entry_len = sizeof(*entry);
+	entry_len += sizeof(*template_data);
+	entry = kmalloc(entry_len, GFP_KERNEL);
 	if (!entry)
 		goto err_out;
 
-	memset(&entry->template, 0, sizeof(entry->template));
-	strncpy(entry->template.file_name, boot_aggregate_name,
-		IMA_EVENT_NAME_LEN_MAX);
+	entry->template_name = IMA_TEMPLATE_NAME;
+	entry->template_len = sizeof(*template_data);
+
+	/* fill in 'ima' template data */
+	template_data = (struct ima_template_data *)entry->template_data;
+	memset(template_data, 0, sizeof(*template_data));
+	strcpy(template_data->file_name, boot_aggregate_name);
 	if (ima_used_chip) {
 		violation = 0;
-		result = ima_calc_boot_aggregate(entry->template.digest);
+		result = ima_calc_boot_aggregate(template_data->digest);
 		if (result < 0) {
 			audit_cause = "hashing_error";
 			kfree(entry);
