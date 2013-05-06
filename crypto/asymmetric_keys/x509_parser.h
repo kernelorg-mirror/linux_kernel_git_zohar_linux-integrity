@@ -22,7 +22,7 @@ struct x509_certificate {
 	struct tm	valid_to;
 	enum pkey_algo	pkey_algo : 8;		/* Public key algorithm */
 	enum pkey_algo	sig_pkey_algo : 8;	/* Signature public key algorithm */
-	enum pkey_hash_algo sig_hash_algo : 8;	/* Signature hash algorithm */
+	enum hash_algo sig_hash_algo : 8;	/* Signature hash algorithm */
 	const void	*tbs;			/* Signed data */
 	size_t		tbs_size;		/* Size of signed data */
 	const void	*sig;			/* Signature data */
