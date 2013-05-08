@@ -27,10 +27,12 @@
 
 #include "ima.h"
 
-int ima_template = IMA_NG_TEMPLATE;
+int ima_template = CONFIG_IMA_DEFAULT_TEMPLATE;
 static int __init ima_template_setup(char *str)
 {
-	if (strncmp(str, "ima", 3) == 0)
+	if (strncmp(str, "ima-ng", 6) == 0)
+		ima_template = IMA_NG_TEMPLATE;
+	else if (strncmp(str, "ima", 3) == 0)
 		ima_template = IMA_TEMPLATE;
 	return 1;
 }

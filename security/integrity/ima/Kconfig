@@ -9,7 +9,6 @@ config IMA
 	select CRYPTO_HMAC
 	select CRYPTO_MD5
 	select CRYPTO_SHA1
-	select CRYPTO_HASH_INFO
 	select TCG_TPM if HAS_IOMEM && !UML
 	select TCG_TIS if TCG_TPM && X86
 	select TCG_IBMVTPM if TCG_TPM && PPC64
@@ -45,6 +44,31 @@ config IMA_LSM_RULES
 	default y
 	help
 	  Disabling this option will disregard LSM based policy rules.
+
+choice 
+	prompt "Default template"
+	default IMA_NG_TEMPLATE
+	depends on IMA
+	help
+	  Select the default IMA measurement template.
+
+	  The original 'ima' measurement list template contains a
+	  hash, defined as 20 bytes, and a null terminated pathname,
+	  limited to 255 characters.  The 'ima-ng' measurement list 
+	  template permits both larger hash digests and longer
+	  pathnames.
+
+	config IMA_TEMPLATE
+		bool "ima"
+	config IMA_NG_TEMPLATE
+		bool "ima-ng (default)"
+endchoice
+
+config IMA_DEFAULT_TEMPLATE
+	int
+	depends on IMA
+	default 0 if IMA_TEMPLATE
+	default 1 if IMA_NG_TEMPLATE
 
 config IMA_APPRAISE
 	bool "Appraise integrity measurements"
