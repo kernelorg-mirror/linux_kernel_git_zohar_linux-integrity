@@ -166,7 +166,7 @@ static void __init parse_header(char *s)
 	int i;
 
 	buf[8] = '\0';
-	for (i = 0, s += 6; i < 12; i++, s += 8) {
+	for (i = 0; i < 12; i++, s += 8) {
 		memcpy(buf, s, 8);
 		parsed[i] = simple_strtoul(buf, NULL, 16);
 	}
@@ -187,6 +187,7 @@ static void __init parse_header(char *s)
 
 static __initdata enum state {
 	Start,
+	GotFormat,
 	Collect,
 	GotHeader,
 	SkipIt,
@@ -230,7 +231,7 @@ static __initdata char *header_buf, *symlink_buf, *name_buf;
 
 static int __init do_start(void)
 {
-	read_into(header_buf, 110, GotHeader);
+	read_into(header_buf, 6, GotFormat);
 	return 0;
 }
 
@@ -248,7 +249,7 @@ static int __init do_collect(void)
 	return 0;
 }
 
-static int __init do_header(void)
+static int __init do_format(void)
 {
 	if (memcmp(collected, "070707", 6)==0) {
 		error("incorrect cpio method used: use -H newc option");
@@ -258,6 +259,12 @@ static int __init do_header(void)
 		error("no cpio magic");
 		return 1;
 	}
+	read_into(header_buf, 104, GotHeader);
+	return 0;
+}
+
+static int __init do_header(void)
+{
 	parse_header(collected);
 	next_header = this_header + N_ALIGN(name_len) + body_len;
 	next_header = (next_header + 3) & ~3;
@@ -400,6 +407,7 @@ static int __init do_symlink(void)
 
 static __initdata int (*actions[])(void) = {
 	[Start]		= do_start,
+	[GotFormat]	= do_format,
 	[Collect]	= do_collect,
 	[GotHeader]	= do_header,
 	[SkipIt]	= do_skip,
