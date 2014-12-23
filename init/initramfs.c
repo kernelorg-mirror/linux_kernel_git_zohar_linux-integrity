@@ -52,6 +52,7 @@ static void __init error(char *x)
 /* link hash */
 
 #define N_ALIGN(len) ((((len) + 1) & ~3) + 2)
+#define X_ALIGN(len) ((len + 3) & ~3)
 
 static __initdata struct hash {
 	int ino, minor, major;
@@ -154,20 +155,21 @@ static __initdata time_t mtime;
 
 static __initdata unsigned long ino, major, minor, nlink;
 static __initdata umode_t mode;
-static __initdata unsigned long body_len, name_len;
+static __initdata unsigned long body_len, name_len, xattr_buflen;
 static __initdata uid_t uid;
 static __initdata gid_t gid;
 static __initdata unsigned rdev;
+static __initdata int newcx;
 
 static void __init parse_header(char *s)
 {
-	unsigned long parsed[12];
+	unsigned long parsed[13];
 	char buf[9];
 	int ret;
 	int i;
 
 	buf[8] = '\0';
-	for (i = 0; i < 12; i++, s += 8) {
+	for (i = 0; i < (!newcx ? 12 : 13); i++, s += 8) {
 		memcpy(buf, s, 8);
 		ret = kstrtoul(buf, 16, &parsed[i]);
 		if (ret)
@@ -184,6 +186,7 @@ static void __init parse_header(char *s)
 	minor = parsed[8];
 	rdev = new_encode_dev(MKDEV(parsed[9], parsed[10]));
 	name_len = parsed[11];
+	xattr_buflen = newcx ? parsed[12] : 0;
 }
 
 /* FSM */
@@ -195,7 +198,9 @@ static __initdata enum state {
 	GotHeader,
 	SkipIt,
 	GotName,
+	GotXattrs,
 	CopyFile,
+	SetXattrs,
 	GotSymlink,
 	Reset
 } state, next_state;
@@ -212,6 +217,8 @@ static inline void __init eat(unsigned n)
 }
 
 static __initdata char *vcollected;
+static __initdata char *ncollected;
+static __initdata u8 *xcollected;
 static __initdata char *collected;
 static long remains __initdata;
 static __initdata char *collect;
@@ -230,7 +237,7 @@ static void __init read_into(char *buf, unsigned size, enum state next)
 	}
 }
 
-static __initdata char *header_buf, *symlink_buf, *name_buf;
+static __initdata char *header_buf, *symlink_buf, *name_buf, *xattr_buf;
 
 static int __init do_start(void)
 {
@@ -254,22 +261,26 @@ static int __init do_collect(void)
 
 static int __init do_format(void)
 {
+	newcx = 0;
 	if (memcmp(collected, "070707", 6)==0) {
 		error("incorrect cpio method used: use -H newc option");
 		return 1;
 	}
-	if (memcmp(collected, "070701", 6)) {
+	if (memcmp(collected, "070703", 6) == 0)
+		newcx = 1;
+	else if (memcmp(collected, "070701", 6)) {
 		error("no cpio magic");
 		return 1;
 	}
-	read_into(header_buf, 104, GotHeader);
+	read_into(header_buf, !newcx ? 104: 112, GotHeader);
 	return 0;
 }
 
 static int __init do_header(void)
 {
 	parse_header(collected);
-	next_header = this_header + N_ALIGN(name_len) + body_len;
+	next_header = this_header + N_ALIGN(name_len) + X_ALIGN(xattr_buflen)
+	    + body_len;
 	next_header = (next_header + 3) & ~3;
 	state = SkipIt;
 	if (name_len <= 0 || name_len > PATH_MAX)
@@ -331,8 +342,60 @@ static void __init clean_path(char *path, umode_t fmode)
 	}
 }
 
-static __initdata int wfd;
+static int __init do_xattrs(void)
+{
+	state = next_state;
+	xcollected = kmalloc(xattr_buflen, GFP_KERNEL);
+	if (!xcollected)
+		panic("can't allocate xattr buffer");
+	memcpy(xcollected, collected, xattr_buflen);
+	return 0;
+}
 
+static int __init do_setxattrs(void)
+{
+	u8 *buf = xcollected;
+	u8 *bufend = buf + xattr_buflen - 1;
+	int i, num_xattrs = 0;
+
+	state = SkipIt;
+	next_state = Reset;
+
+	*bufend = '\0';
+	sscanf(buf, "%08X", &num_xattrs);
+	buf += 8; 
+
+	/* xattr format: name value-len value */
+	for (i = 0; i < num_xattrs || buf > bufend; i++) {
+		char *xattr_name = buf;
+		unsigned xattr_value_size;
+		u8 *xattr_buf;
+		int ret;
+
+		buf += strlen(xattr_name) + 1;
+		if (buf + 8 > bufend)
+			break;
+
+		ret = sscanf(buf, "%08X", &xattr_value_size);
+		xattr_buf = buf += 8;
+		if (ret != 1 || xattr_buf + xattr_value_size > bufend)
+			break;
+
+		ret = sys_setxattr(ncollected, xattr_name, xattr_buf,
+				   xattr_value_size, 0);
+		pr_debug("%s: %s size: %u (ret: %d)\n", ncollected, xattr_name,
+			xattr_value_size, ret);
+		buf += xattr_value_size;
+	}
+	if (buf > bufend)
+		error("malformed xattrs");
+	kfree(ncollected);
+	kfree(xcollected);
+	xcollected = NULL;
+	return 0;
+}
+
+static __initdata int wfd;
 static int __init do_name(void)
 {
 	state = SkipIt;
@@ -373,6 +436,12 @@ static int __init do_name(void)
 			do_utime(collected, mtime);
 		}
 	}
+
+	if (xattr_buflen > 0) {
+		ncollected = kstrdup(collected, GFP_KERNEL);
+		next_state = (state == SkipIt) ? SetXattrs : state;
+		read_into(xattr_buf, X_ALIGN(xattr_buflen), GotXattrs);
+	}
 	return 0;
 }
 
@@ -385,7 +454,7 @@ static int __init do_copy(void)
 		do_utime(vcollected, mtime);
 		kfree(vcollected);
 		eat(body_len);
-		state = SkipIt;
+		state = (xattr_buflen > 0) ? SetXattrs : SkipIt;
 		return 0;
 	} else {
 		if (xwrite(wfd, victim, byte_count) != byte_count)
@@ -415,7 +484,9 @@ static __initdata int (*actions[])(void) = {
 	[GotHeader]	= do_header,
 	[SkipIt]	= do_skip,
 	[GotName]	= do_name,
+	[GotXattrs]	= do_xattrs,
 	[CopyFile]	= do_copy,
+	[SetXattrs]	= do_setxattrs,
 	[GotSymlink]	= do_symlink,
 	[Reset]		= do_reset,
 };
@@ -464,9 +535,10 @@ static char * __init unpack_to_rootfs(char *buf, unsigned long len)
 	const char *compress_name;
 	static __initdata char msg_buf[64];
 
-	header_buf = kmalloc(110, GFP_KERNEL);
+	header_buf = kmalloc(118, GFP_KERNEL);
 	symlink_buf = kmalloc(PATH_MAX + N_ALIGN(PATH_MAX) + 1, GFP_KERNEL);
 	name_buf = kmalloc(N_ALIGN(PATH_MAX), GFP_KERNEL);
+	xattr_buf = kmalloc(PAGE_SIZE, GFP_KERNEL);
 
 	if (!header_buf || !symlink_buf || !name_buf)
 		panic("can't allocate buffers");
@@ -513,6 +585,7 @@ static char * __init unpack_to_rootfs(char *buf, unsigned long len)
 		len -= my_inptr;
 	}
 	dir_utime();
+	kfree(xattr_buf);
 	kfree(name_buf);
 	kfree(symlink_buf);
 	kfree(header_buf);
