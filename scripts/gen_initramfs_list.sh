@@ -24,6 +24,7 @@ $0 [-o <file>] [-u <uid>] [-g <gid>] {-d | <cpio_source>} ...
 	-g <gid>       Group ID to map to group ID 0 (root).
 		       <gid> is only meaningful if <cpio_source> is a
 		       directory.  "squash" forces all files to gid 0.
+	-x             include file extended attributes in cpio archive.
 	<cpio_source>  File list or directory for cpio archive.
 		       If <cpio_source> is a .cpio file it will be used
 		       as direct input to initramfs.
@@ -223,6 +224,7 @@ root_gid=0
 dep_list=
 cpio_file=
 cpio_list=
+cpio_opts=
 output="/dev/stdout"
 output_file=""
 is_cpio_compressed=
@@ -278,6 +280,9 @@ while [ $# -gt 0 ]; do
 			default_list="$arg"
 			${dep_list}default_initramfs
 			;;
+		"-x")	# include extended attributers
+			cpio_opts="-x"
+			;;
 		"-h")
 			usage
 			exit 0
@@ -307,7 +312,8 @@ if [ ! -z ${output_file} ]; then
 			fi
 		fi
 		cpio_tfile="$(mktemp ${TMPDIR:-/tmp}/cpiofile.XXXXXX)"
-		usr/gen_init_cpio $timestamp ${cpio_list} > ${cpio_tfile}
+		usr/gen_init_cpio $timestamp ${cpio_opts} ${cpio_list} \
+			> ${cpio_tfile}
 	else
 		cpio_tfile=${cpio_file}
 	fi
