@@ -155,3 +155,15 @@ config IMA_APPRAISE_SIGNED_INIT
 	default n
 	help
 	   This option requires user-space init to be signed.
+
+config IMA_APPRAISE_ROOTFS
+	bool "Require labeled rootfs"
+	depends on IMA_LOAD_X509
+	default n
+	help
+	   This option is dependent on the initramfs including
+	   extended attributes(xattrs) in the CPIO file and the
+	   rootfs file system for supporting them.
+
+	   The new CPIO format (070703) includes xattrs in the
+	   initramfs.  Use tmpfs as the rootfs.

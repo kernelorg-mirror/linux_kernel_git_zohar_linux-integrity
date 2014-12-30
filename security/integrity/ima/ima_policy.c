@@ -27,6 +27,7 @@
 #define IMA_UID		0x0008
 #define IMA_FOWNER	0x0010
 #define IMA_FSUUID	0x0020
+#define IMA_SBID	0x0040
 
 #define UNKNOWN		0
 #define MEASURE		0x0001	/* same as IMA_MEASURE */
@@ -49,6 +50,7 @@ struct ima_rule_entry {
 	enum ima_hooks func;
 	int mask;
 	unsigned long fsmagic;
+	char sbid[32];
 	u8 fsuuid[16];
 	kuid_t uid;
 	kuid_t fowner;
@@ -93,6 +95,10 @@ static struct ima_rule_entry default_appraise_rules[] = {
 	{.action = DONT_APPRAISE, .fsmagic = PROC_SUPER_MAGIC, .flags = IMA_FSMAGIC},
 	{.action = DONT_APPRAISE, .fsmagic = SYSFS_MAGIC, .flags = IMA_FSMAGIC},
 	{.action = DONT_APPRAISE, .fsmagic = DEBUGFS_MAGIC, .flags = IMA_FSMAGIC},
+#ifdef CONFIG_IMA_APPRAISE_ROOTFS
+	{.action = APPRAISE, .fsmagic = TMPFS_MAGIC, .sbid="rootfs", 
+	 .flags = IMA_FSMAGIC | IMA_SBID},
+#endif
 	{.action = DONT_APPRAISE, .fsmagic = TMPFS_MAGIC, .flags = IMA_FSMAGIC},
 	{.action = DONT_APPRAISE, .fsmagic = RAMFS_MAGIC, .flags = IMA_FSMAGIC},
 	{.action = DONT_APPRAISE, .fsmagic = DEVPTS_SUPER_MAGIC, .flags = IMA_FSMAGIC},
@@ -187,6 +193,8 @@ static bool ima_match_rules(struct ima_rule_entry *rule,
 		return false;
 	if ((rule->flags & IMA_FSUUID) &&
 	    memcmp(rule->fsuuid, inode->i_sb->s_uuid, sizeof(rule->fsuuid)))
+		return false;
+	if ((rule->flags & IMA_SBID) && strcmp(rule->sbid, inode->i_sb->s_id))
 		return false;
 	if ((rule->flags & IMA_UID) && !uid_eq(rule->uid, cred->uid))
 		return false;
