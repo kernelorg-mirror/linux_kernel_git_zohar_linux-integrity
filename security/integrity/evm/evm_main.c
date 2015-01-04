@@ -19,6 +19,7 @@
 #include <linux/module.h>
 #include <linux/crypto.h>
 #include <linux/audit.h>
+#include <linux/magic.h>
 #include <linux/xattr.h>
 #include <linux/integrity.h>
 #include <linux/evm.h>
@@ -128,11 +129,16 @@ static enum integrity_status evm_verify_hmac(struct dentry *dentry,
 	if (rc <= 0) {
 		evm_status = INTEGRITY_FAIL;
 		if (rc == -ENODATA) {
+			struct super_block *sb = dentry->d_inode->i_sb;
+
 			rc = evm_find_protected_xattrs(dentry);
-			if (rc > 0)
-				evm_status = INTEGRITY_NOLABEL;
-			else if (rc == 0)
+			if (rc == 0)
 				evm_status = INTEGRITY_NOXATTRS; /* new file */
+			else if (rc > 0 && sb->s_magic == TMPFS_MAGIC
+				 && strcmp(sb->s_id, "rootfs") == 0)
+				evm_status = INTEGRITY_UNKNOWN;
+			else if (rc > 0)
+				evm_status = INTEGRITY_NOLABEL;
 		} else if (rc == -EOPNOTSUPP) {
 			evm_status = INTEGRITY_UNKNOWN;
 		}
