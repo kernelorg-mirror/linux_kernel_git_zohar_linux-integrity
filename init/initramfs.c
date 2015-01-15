@@ -163,12 +163,15 @@ static void __init parse_header(char *s)
 {
 	unsigned long parsed[12];
 	char buf[9];
+	int ret;
 	int i;
 
 	buf[8] = '\0';
 	for (i = 0; i < 12; i++, s += 8) {
 		memcpy(buf, s, 8);
-		parsed[i] = simple_strtoul(buf, NULL, 16);
+		ret = kstrtoul(buf, 16, &parsed[i]);
+		if (ret)
+			pr_err("invalid cpio header field (%d)", ret);
 	}
 	ino = parsed[0];
 	mode = parsed[1];
