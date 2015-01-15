@@ -18,6 +18,7 @@
 #include <linux/dirent.h>
 #include <linux/syscalls.h>
 #include <linux/utime.h>
+#include <linux/time.h>
 
 static ssize_t __init xwrite(int fd, const char *p, size_t count)
 {
@@ -155,7 +156,8 @@ static __initdata time_t mtime;
 
 static __initdata unsigned long ino, major, minor, nlink;
 static __initdata umode_t mode;
-static __initdata unsigned long body_len, name_len, xattr_buflen;
+static __initdata uint64_t body_len;
+static __initdata unsigned long name_len, xattr_buflen;
 static __initdata uid_t uid;
 static __initdata gid_t gid;
 static __initdata unsigned rdev;
@@ -164,14 +166,21 @@ static __initdata int newcx;
 static void __init parse_header(char *s)
 {
 	unsigned long parsed[13];
-	char buf[9];
-	int ret;
+	uint64_t parsed64[2];
+	char buf[17];
+	bool ull = 0;
+	int ret = 0;
 	int i;
 
-	buf[8] = '\0';
-	for (i = 0; i < (!newcx ? 12 : 13); i++, s += 8) {
-		memcpy(buf, s, 8);
-		ret = kstrtoul(buf, 16, &parsed[i]);
+	buf[16] = '\0';
+	for (i = 0; i < (!newcx ? 12 : 13); i++, s += (ull ? 16 : 8)) {
+		ull = newcx && (i == 5 || i == 6);
+		
+		buf[8] = '\0';
+		memcpy(buf, s, ull ? 16 : 8);
+
+		ret = ull ?  kstrtoull(buf, 16, &parsed64[i - 5]) :
+			kstrtoul(buf, 16, &parsed[i]);
 		if (ret)
 			pr_err("invalid cpio header field (%d)", ret);
 	}
@@ -180,8 +189,8 @@ static void __init parse_header(char *s)
 	uid = parsed[2];
 	gid = parsed[3];
 	nlink = parsed[4];
-	mtime = parsed[5];
-	body_len = parsed[6];
+	mtime = !newcx ? parsed[5] : do_div(parsed64[0], USEC_PER_SEC);
+	body_len = !newcx ? parsed[6] : parsed64[1];
 	major = parsed[7];
 	minor = parsed[8];
 	rdev = new_encode_dev(MKDEV(parsed[9], parsed[10]));
@@ -272,7 +281,7 @@ static int __init do_format(void)
 		error("no cpio magic");
 		return 1;
 	}
-	read_into(header_buf, !newcx ? 104: 112, GotHeader);
+	read_into(header_buf, !newcx ? 104: 128, GotHeader);
 	return 0;
 }
 
@@ -535,7 +544,7 @@ static char * __init unpack_to_rootfs(char *buf, unsigned long len)
 	const char *compress_name;
 	static __initdata char msg_buf[64];
 
-	header_buf = kmalloc(118, GFP_KERNEL);
+	header_buf = kmalloc(128, GFP_KERNEL);
 	symlink_buf = kmalloc(PATH_MAX + N_ALIGN(PATH_MAX) + 1, GFP_KERNEL);
 	name_buf = kmalloc(N_ALIGN(PATH_MAX), GFP_KERNEL);
 	xattr_buf = kmalloc(PAGE_SIZE, GFP_KERNEL);
