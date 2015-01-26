@@ -36,8 +36,19 @@ $(obj)/initramfs_data.o: $(obj)/initramfs_data.cpio$(suffix_y) FORCE
 
 #####
 # Generate the initramfs cpio archive
+$(obj)/gen_init_cpio.o: $(if $(CONFIG_INITRAMFS_XATTRS), .libxattr_check)
+.libxattr_check:
+	$(Q) if [ ! -f /usr/include/attr/xattr.h ]; then \
+		echo "* Unable to find attr/xattr.h"; \
+		false; \
+	fi;
+
+HOST_EXTRACFLAGS += $(if $(CONFIG_INITRAMFS_XATTRS), -DCONFIG_INITRAMFS_XATTRS)
 
 hostprogs-y := gen_init_cpio
+gen_init_cpio-objs := gen_init_cpio.o \
+	$(if $(CONFIG_INITRAMFS_XATTRS), gen_init_cpio_xattrs.o)
+
 initramfs   := $(CONFIG_SHELL) $(srctree)/scripts/gen_initramfs_list.sh
 ramfs-input := $(if $(filter-out "",$(CONFIG_INITRAMFS_SOURCE)), \
 			$(shell echo $(CONFIG_INITRAMFS_SOURCE)),-d)

@@ -10,7 +10,8 @@
 #include <errno.h>
 #include <ctype.h>
 #include <limits.h>
-#include <attr/xattr.h>
+
+#include "gencpio.h"
 
 /*
  * Original work by Jeff Garzik
@@ -38,71 +39,6 @@ struct file_handler {
 	const char *type;
 	int (*handler)(const char *line);
 };
-
-#define MAX_XATTRNAMES_SIZE 500
-static char xattr_names[MAX_XATTRNAMES_SIZE];
-static char xattr_header[8];	/* number xattrs */
-static ssize_t xattr_nameslen;
-static unsigned int xattrs_buflen;
-
-static char xattr_buf[1000];
-static unsigned int get_xattrs(const char *name)
-{
-    	char xattr_num[9];
-    	char *xname, *buf, *bufend;
-	int xattrsize = 0, num_xattrs = 0;
-
-	xattr_nameslen = listxattr(name, NULL, 0);
-	if (xattr_nameslen <= 0 || xattr_nameslen > MAX_XATTRNAMES_SIZE)
-		return 0;
-
-	xattr_names[xattr_nameslen] = 0;
-	xattr_nameslen = listxattr(name, xattr_names, xattr_nameslen);
-	if (xattr_nameslen <= 0)
-		return 0;
-
-	/* xattr format: name value-len value */
-	buf = xattr_buf + sizeof xattr_header;
-	bufend = xattr_buf + sizeof xattr_buf;
-
-	for (xname = xattr_names; xname < (xattr_names + xattr_nameslen);
-		xname += strlen(xname) + 1) {
-		char sizebuf[9];
-		int offset;
-
-		/* skip security.evm as it is file system specific */
-		if (strcmp(xname, "security.evm") == 0)
-			continue;
-
-		offset = strlen(xname) + 1 + 8;
-		xattrsize = getxattr(name, xname, NULL, 0);
-		if (buf + offset + xattrsize > bufend) {
-			fprintf(stderr, "%s: xattrs too large \n", name);
-			return 0;
-		}
-
-		xattrsize = getxattr(name, xname, buf + offset,
-				     bufend - (buf + offset));
-		if (xattrsize <= 0)
-			continue;
-		
-		num_xattrs++;
-		fprintf(stderr, "%s: %s %x (%d)\n", name, xname, xattrsize,
-			num_xattrs);
-		strcpy(buf, xname);
-		buf += strlen(xname) + 1;
-		sprintf(sizebuf, "%08X", (int)xattrsize); 
-		memcpy(buf, sizebuf, 8);
-		buf += (8 + xattrsize);
-	}
-
-	*buf = 0;
-	buf++;
-	sprintf(xattr_num, "%08X", num_xattrs);
-	memcpy(xattr_buf, xattr_num, 8);
-
-	return buf - xattr_buf;
-}
 
 static void push_string(const char *name)
 {
@@ -174,21 +110,10 @@ static void cpio_trailer(void)
 	}
 }
 
-static void include_xattrs(void)
-{
-	if (!xattrs_buflen)
-		return;
-	
-	if (fwrite(xattr_buf, xattrs_buflen, 1, stdout) != 1)
-		fprintf(stderr, "writing xattrs failed\n");
-	offset += xattrs_buflen;
-
-	push_pad();
-}
-
 static int cpio_mkslink(const char *name, const char *target,
 			 unsigned int mode, uid_t uid, gid_t gid)
 {
+	unsigned int xattrs_buflen;
 	char s[256];
 
 	xattrs_buflen = newcx ? get_xattrs(name) : 0;
@@ -216,8 +141,11 @@ static int cpio_mkslink(const char *name, const char *target,
 	push_pad();
 	push_string(target);
 	push_pad();
-	if (newcx)
-		include_xattrs();
+	if (newcx && xattrs_buflen) {
+		include_xattrs(xattrs_buflen);
+		offset += xattrs_buflen;
+		push_pad();
+	}
 	return 0;
 }
 
@@ -242,6 +170,7 @@ static int cpio_mkslink_line(const char *line)
 static int cpio_mkgeneric(const char *name, unsigned int mode,
 		       uid_t uid, gid_t gid)
 {
+	unsigned int xattrs_buflen;
 	char s[256];
 
 	xattrs_buflen = newcx ? get_xattrs(name) : 0;
@@ -266,8 +195,11 @@ static int cpio_mkgeneric(const char *name, unsigned int mode,
 		0);			/* chksum */
 	push_hdr(s);
 	push_rest(name);
-	if (newcx)
-		include_xattrs();
+	if (newcx && xattrs_buflen) {
+		include_xattrs(xattrs_buflen);
+		offset += xattrs_buflen;
+		push_pad();
+	}
 	return 0;
 }
 
@@ -391,6 +323,7 @@ static int cpio_mkfile(const char *name, const char *location,
 			unsigned int mode, uid_t uid, gid_t gid,
 			unsigned int nlinks)
 {
+	unsigned int xattrs_buflen;
 	char s[256];
 	char *filebuf = NULL;
 	struct stat buf;
@@ -460,8 +393,11 @@ static int cpio_mkfile(const char *name, const char *location,
 		push_hdr(s);
 		push_string(name);
 		push_pad();
-		if (newcx)
-			include_xattrs();
+		if (newcx && xattrs_buflen) {
+			include_xattrs(xattrs_buflen);
+			offset += xattrs_buflen;
+			push_pad();
+		}
 		if (size) {
 			if (fwrite(filebuf, size, 1, stdout) != 1) {
 				fprintf(stderr, "writing filebuf failed\n");

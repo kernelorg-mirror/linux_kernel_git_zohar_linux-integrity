@@ -98,3 +98,12 @@ config RD_LZ4
 	help
 	  Support loading of a LZ4 encoded initial ramdisk or cpio buffer
 	  If unsure, say N.
+
+config INITRAMFS_XATTRS
+	bool "Include extended attributes in the initramfs"
+	default n
+	help
+	Many of the Linux security/integrity features are dependent on
+	file metadata, stored as extended attributes (xattrs), for making
+	decisions.  This option includes the extended attributes in the
+	initramfs.
