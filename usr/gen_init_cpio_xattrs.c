@@ -7,12 +7,13 @@
 
 #include "gencpio.h"
 
-#define MAX_XATTRNAMES_SIZE 500
-
-static char xattr_names[MAX_XATTRNAMES_SIZE];
+static char *xattr_names;
 static char xattr_header[8];	/* number xattrs */
 static ssize_t xattr_nameslen;
-static char xattr_buf[1000];
+
+#define DEFAULT_XATTR_BUFSIZE 1024
+static char *xattr_buf;
+static unsigned int xattr_bufsize;
 
 unsigned int get_xattrs(const char *name)
 {
@@ -20,19 +21,39 @@ unsigned int get_xattrs(const char *name)
 	char *xname, *buf, *bufend;
 	int num_xattrs = 0;
 	ssize_t xattrsize = 0;
+	ssize_t new_xattr_nameslen;
 
-	xattr_nameslen = listxattr(name, NULL, 0);
-	if (xattr_nameslen <= 0 || xattr_nameslen > MAX_XATTRNAMES_SIZE)
+	new_xattr_nameslen = listxattr(name, NULL, 0);
+	if (new_xattr_nameslen <= 0)
 		return 0;
 
+	if (new_xattr_nameslen > xattr_nameslen) {
+		if (xattr_names)
+			free(xattr_names);
+		xattr_nameslen = new_xattr_nameslen;
+		xattr_names = malloc(xattr_nameslen + 1);
+		if (!xattr_names) {
+			fprintf(stderr, "xattr_names out of memory\n");
+			return 0;
+		}
+	}
 	xattr_names[xattr_nameslen] = 0;
 	xattr_nameslen = listxattr(name, xattr_names, xattr_nameslen);
 	if (xattr_nameslen <= 0)
 		return 0;
 
 	/* xattr format: <number of xattrs> {<name> <value-len> <value>} */
+	if (!xattr_buf) {
+		xattr_buf = malloc(DEFAULT_XATTR_BUFSIZE);
+		if (!xattr_buf) {
+			fprintf(stderr, "xattr_buf out of memory\n");
+			return 0;
+		}
+		xattr_bufsize = DEFAULT_XATTR_BUFSIZE;
+
+	}
 	buf = xattr_buf + sizeof xattr_header;	/* reserve number of xattrs */
-	bufend = xattr_buf + sizeof xattr_buf;
+	bufend = xattr_buf + xattr_bufsize;
 
 	for (xname = xattr_names; xname < (xattr_names + xattr_nameslen);
 	     xname += strlen(xname) + 1) {
@@ -48,9 +69,24 @@ unsigned int get_xattrs(const char *name)
 			continue;
 
 		offset = strlen(xname) + 1 + 8;
-		if (buf + offset + xattrsize > bufend) {
-			fprintf(stderr, "%s: xattrs too large \n", name);
-			return 0;
+		if ((offset + xattrsize + 1) > bufend - buf) {
+			char *new_xattr_buf;
+			size_t alloc_size;
+
+			alloc_size = offset + xattrsize + 1 - (bufend - buf);
+			if (alloc_size < DEFAULT_XATTR_BUFSIZE)
+				alloc_size = DEFAULT_XATTR_BUFSIZE;
+
+			new_xattr_buf = realloc(xattr_buf,
+						xattr_bufsize + alloc_size);
+			if (!new_xattr_buf) {
+				fprintf(stderr, "xattr_buf out of memory\n");
+				return 0;
+			}
+			xattr_buf = new_xattr_buf;
+			xattr_bufsize += alloc_size;
+			buf = xattr_buf + sizeof xattr_header;
+			bufend = xattr_buf + xattr_bufsize;
 		}
 
 		xattrsize = getxattr(name, xname, buf + offset,
