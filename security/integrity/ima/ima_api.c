@@ -2,6 +2,7 @@
  * Copyright (C) 2008 IBM Corporation
  *
  * Author: Mimi Zohar <zohar@us.ibm.com>
+ *         Yuqiong Sun <suny@us.ibm.com>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -20,6 +21,23 @@
 #include <linux/evm.h>
 
 #include "ima.h"
+
+/*
+* ima_free_queue_entries - free an existing measurement list
+*/
+void ima_free_queue_entries(struct ima_namespace *ns)
+{
+	struct ima_queue_entry *current_qe;
+	struct ima_queue_entry *next_qe;
+
+	/* No more extensions to the list, so no lock? */
+	list_for_each_entry_safe(current_qe, next_qe,
+				 &ns->ima_measurements, later) {
+		list_del(&current_qe->later);
+		ima_free_template_entry(current_qe->entry);
+		kfree(current_qe);
+	}
+}
 
 /*
  * ima_free_template_entry - free an existing template entry
@@ -87,7 +105,8 @@ out:
  */
 int ima_store_template(struct ima_template_entry *entry,
 		       int violation, struct inode *inode,
-		       const unsigned char *filename, int pcr)
+		       const unsigned char *filename, int pcr,
+		       struct ima_namespace *ns)
 {
 	static const char op[] = "add_template_measure";
 	static const char audit_cause[] = "hashing_error";
@@ -115,7 +134,8 @@ int ima_store_template(struct ima_template_entry *entry,
 		memcpy(entry->digest, hash.hdr.digest, hash.hdr.length);
 	}
 	entry->pcr = pcr;
-	result = ima_add_template_entry(entry, violation, op, inode, filename);
+	result = ima_add_template_entry(entry, violation,
+					op, inode, filename, ns);
 	return result;
 }
 
@@ -128,7 +148,8 @@ int ima_store_template(struct ima_template_entry *entry,
  */
 void ima_add_violation(struct file *file, const unsigned char *filename,
 		       struct integrity_iint_cache *iint,
-		       const char *op, const char *cause)
+		       const char *op, const char *cause,
+		       struct ima_namespace *ns)
 {
 	struct ima_template_entry *entry;
 	struct inode *inode = file_inode(file);
@@ -146,7 +167,7 @@ void ima_add_violation(struct file *file, const unsigned char *filename,
 		goto err_out;
 	}
 	result = ima_store_template(entry, violation, inode,
-				    filename, CONFIG_IMA_MEASURE_PCR_IDX);
+				    filename, CONFIG_IMA_MEASURE_PCR_IDX, ns);
 	if (result < 0)
 		ima_free_template_entry(entry);
 err_out:
@@ -256,7 +277,7 @@ out:
 void ima_store_measurement(struct integrity_iint_cache *iint,
 			   struct file *file, const unsigned char *filename,
 			   struct evm_ima_xattr_data *xattr_value,
-			   int xattr_len, int pcr)
+			   int xattr_len, int pcr, struct ima_namespace *ns)
 {
 	static const char op[] = "add_template_measure";
 	static const char audit_cause[] = "ENOMEM";
@@ -277,7 +298,8 @@ void ima_store_measurement(struct integrity_iint_cache *iint,
 		return;
 	}
 
-	result = ima_store_template(entry, violation, inode, filename, pcr);
+	result = ima_store_template(entry, violation, inode,
+				    filename, pcr, ns);
 	if (!result || result == -EEXIST) {
 		iint->flags |= IMA_MEASURED;
 		iint->measured_pcrs |= (0x1 << pcr);

@@ -21,12 +21,23 @@ struct ima_namespace {
 	struct user_namespace *user_ns;
 	struct ns_common ns;
 	struct ima_namespace *parent;
+	struct list_head ima_measurements;
 };
 
 extern struct ima_namespace init_ima_ns;
+static inline struct list_head *get_measurements(void)
+{
+	return &current->nsproxy->ima_ns->ima_measurements;
+}
+
+static inline struct ima_namespace *get_current_ns(void)
+{
+	return current->nsproxy->ima_ns;
+}
 
 #ifdef CONFIG_IMA_NS
 void free_ima_ns(struct kref *kref);
+void ima_free_queue_entries(struct ima_namespace *ns);
 
 static inline void get_ima_ns(struct ima_namespace *ns)
 {

@@ -11,5 +11,6 @@ struct ima_namespace init_ima_ns = {
 	.ns.ops = &imans_operations,
 #endif
 	.parent = NULL,
+	.ima_measurements = LIST_HEAD_INIT(init_ima_ns.ima_measurements),
 };
 EXPORT_SYMBOL(init_ima_ns);

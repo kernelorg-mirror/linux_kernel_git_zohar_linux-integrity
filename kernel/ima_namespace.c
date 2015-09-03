@@ -54,6 +54,7 @@ static struct ima_namespace *clone_ima_ns(struct user_namespace *user_ns,
 	get_ima_ns(old_ns);
 	ns->parent = old_ns;
 	ns->user_ns = get_user_ns(user_ns);
+	INIT_LIST_HEAD(&ns->ima_measurements);
 
 	return ns;
 }
@@ -91,6 +92,7 @@ static void destroy_ima_ns(struct ima_namespace *ns)
 {
 	put_user_ns(ns->user_ns);
 	ns_free_inum(&ns->ns);
+	ima_free_queue_entries(ns);
 	kfree(ns);
 }
 

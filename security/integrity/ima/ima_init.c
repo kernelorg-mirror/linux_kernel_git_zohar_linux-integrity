@@ -80,7 +80,8 @@ static int __init ima_add_boot_aggregate(void)
 
 	result = ima_store_template(entry, violation, NULL,
 				    boot_aggregate_name,
-				    CONFIG_IMA_MEASURE_PCR_IDX);
+				    CONFIG_IMA_MEASURE_PCR_IDX,
+				    &init_ima_ns);
 	if (result < 0) {
 		ima_free_template_entry(entry);
 		audit_cause = "store_entry";

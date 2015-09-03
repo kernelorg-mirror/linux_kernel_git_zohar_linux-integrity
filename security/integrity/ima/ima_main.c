@@ -80,7 +80,8 @@ static void ima_rdwr_violation_check(struct file *file,
 				     struct integrity_iint_cache *iint,
 				     int must_measure,
 				     char **pathbuf,
-				     const char **pathname)
+				     const char **pathname,
+				     struct ima_namespace *ns)
 {
 	struct inode *inode = file_inode(file);
 	char filename[NAME_MAX];
@@ -107,10 +108,10 @@ static void ima_rdwr_violation_check(struct file *file,
 
 	if (send_tomtou)
 		ima_add_violation(file, *pathname, iint,
-				  "invalid_pcr", "ToMToU");
+				  "invalid_pcr", "ToMToU", ns);
 	if (send_writers)
 		ima_add_violation(file, *pathname, iint,
-				  "invalid_pcr", "open_writers");
+				  "invalid_pcr", "open_writers", ns);
 }
 
 static void ima_check_last_writer(struct integrity_iint_cache *iint,
@@ -170,6 +171,7 @@ static int process_measurement(struct file *file, char *buf, loff_t size,
 	int xattr_len = 0;
 	bool violation_check;
 	enum hash_algo hash_algo;
+	struct ima_namespace *ns = get_current_ns();
 
 	if (!ima_policy_flag || !S_ISREG(inode->i_mode))
 		return 0;
@@ -200,7 +202,7 @@ static int process_measurement(struct file *file, char *buf, loff_t size,
 
 	if (violation_check) {
 		ima_rdwr_violation_check(file, iint, action & IMA_MEASURE,
-					 &pathbuf, &pathname);
+					 &pathbuf, &pathname, ns);
 		if (!action) {
 			rc = 0;
 			goto out_free;
@@ -246,7 +248,7 @@ static int process_measurement(struct file *file, char *buf, loff_t size,
 
 	if (action & IMA_MEASURE)
 		ima_store_measurement(iint, file, pathname,
-				      xattr_value, xattr_len, pcr);
+				      xattr_value, xattr_len, pcr, ns);
 	if (action & IMA_APPRAISE_SUBMASK)
 		rc = ima_appraise_measurement(func, iint, file, pathname,
 					      xattr_value, xattr_len, opened);

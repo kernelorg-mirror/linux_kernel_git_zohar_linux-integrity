@@ -15,6 +15,7 @@
 #include <linux/integrity.h>
 #include <crypto/sha.h>
 #include <linux/key.h>
+#include <linux/ima_namespace.h>
 
 /* iint action cache flags */
 #define IMA_MEASURE		0x00000001
