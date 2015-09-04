@@ -3,6 +3,7 @@
  *
  * Author:
  * Mimi Zohar <zohar@us.ibm.com>
+ * Yuqiong Sun <suny@us.ibm.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -48,12 +49,14 @@ bool is_ima_appraise_enabled(void)
  *
  * Return 1 to appraise
  */
-int ima_must_appraise(struct inode *inode, int mask, enum ima_hooks func)
+int ima_must_appraise(struct inode *inode, int mask, enum ima_hooks func,
+		      struct user_namespace *user_ns)
 {
 	if (!ima_appraise)
 		return 0;
 
-	return ima_match_policy(inode, func, mask, IMA_APPRAISE, NULL);
+	return ima_match_policy(inode, func, mask,
+				IMA_APPRAISE, NULL, user_ns);
 }
 
 static int ima_fix_xattr(struct dentry *dentry,
@@ -342,11 +345,14 @@ void ima_inode_post_setattr(struct dentry *dentry)
 	struct integrity_iint_cache *iint;
 	int must_appraise;
 
-	if (!(ima_policy_flag & IMA_APPRAISE) || !S_ISREG(inode->i_mode)
-	    || !(inode->i_opflags & IOP_XATTR))
+	if (!(init_ima_ns.ima_policy_flag & IMA_APPRAISE) ||
+	    !S_ISREG(inode->i_mode) ||
+	    !(inode->i_opflags & IOP_XATTR))
 		return;
 
-	must_appraise = ima_must_appraise(inode, MAY_ACCESS, POST_SETATTR);
+	/* Temporary fix */
+	must_appraise = ima_must_appraise(inode, MAY_ACCESS, POST_SETATTR,
+					  current_user_ns());
 	iint = integrity_iint_find(inode);
 	if (iint) {
 		iint->flags &= ~(IMA_APPRAISE | IMA_APPRAISED |
@@ -378,8 +384,10 @@ static int ima_protect_xattr(struct dentry *dentry, const char *xattr_name,
 static void ima_reset_appraise_flags(struct inode *inode, int digsig)
 {
 	struct integrity_iint_cache *iint;
+	struct ns_status *status;
 
-	if (!(ima_policy_flag & IMA_APPRAISE) || !S_ISREG(inode->i_mode))
+	if (!(init_ima_ns.ima_policy_flag & IMA_APPRAISE) ||
+	    !S_ISREG(inode->i_mode))
 		return;
 
 	iint = integrity_iint_find(inode);
@@ -387,9 +395,20 @@ static void ima_reset_appraise_flags(struct inode *inode, int digsig)
 		return;
 
 	iint->flags &= ~IMA_DONE_MASK;
-	iint->measured_pcrs = 0;
 	if (digsig)
 		iint->flags |= IMA_DIGSIG;
+
+	/* change flags for all ns status linked to this iint */
+	/* TODO: since inode->i_mutex cannot be used,
+	 * there should be some locks here
+	 */
+	list_for_each_entry(status, &iint->ns_list, ns_next) {
+		status->flags &= ~IMA_DONE_MASK;
+		status->measured_pcrs = 0;
+		if (digsig)
+			status->flags |= IMA_DIGSIG;
+	}
+
 	return;
 }
 

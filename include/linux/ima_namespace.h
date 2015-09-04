@@ -15,6 +15,11 @@
 #include <linux/nsproxy.h>
 #include <linux/rculist.h>
 #include <linux/sched.h>
+#include <linux/fs.h>
+
+enum ima_fs_flags {
+	IMA_FS_BUSY,
+};
 
 struct ima_namespace {
 	struct kref kref;
@@ -22,9 +27,22 @@ struct ima_namespace {
 	struct ns_common ns;
 	struct ima_namespace *parent;
 	struct list_head ima_measurements;
+	/* Pointer to ns's current policy */
+	struct list_head *ima_rules;
+	struct list_head ima_temp_rules;
+	/* ns's policy rules */
+	struct list_head ima_policy_rules;
+	/* How many times a policy has been written */
+	int nr_extents;
+	/* ima_policy file avaiability */
+	unsigned long ima_fs_flags;
+	/* for policy quick check */
+	int ima_policy_flag;
+	struct list_head iint_list;
 };
 
 extern struct ima_namespace init_ima_ns;
+extern struct list_head ima_default_rules;
 static inline struct list_head *get_measurements(void)
 {
 	return &current->nsproxy->ima_ns->ima_measurements;
@@ -35,9 +53,41 @@ static inline struct ima_namespace *get_current_ns(void)
 	return current->nsproxy->ima_ns;
 }
 
+static inline struct list_head **get_current_ima_rules(void)
+{
+	return &current->nsproxy->ima_ns->ima_rules;
+}
+
+static inline struct list_head **get_ima_rules(struct ima_namespace *ns)
+{
+	return &ns->ima_rules;
+}
+
+static inline struct list_head *get_ima_policy_rules(struct ima_namespace *ns)
+{
+	return &ns->ima_policy_rules;
+}
+
+static inline struct list_head *get_current_ima_policy_rules(void)
+{
+	return &current->nsproxy->ima_ns->ima_policy_rules;
+}
+
+void ima_update_policy_flag(struct ima_namespace *ns);
+int ima_open_policy_ns(struct inode *inode, struct file *filp,
+		       struct ima_namespace *ns);
+ssize_t ima_write_policy_ns(struct file *file,
+			    const char __user *buf,
+			    size_t size, loff_t *ppos,
+			    struct ima_namespace *ns);
+int ima_release_policy_ns(struct inode *inode, struct file *file,
+			  struct ima_namespace *ns);
+
 #ifdef CONFIG_IMA_NS
 void free_ima_ns(struct kref *kref);
+void ima_delete_rules(struct list_head *ima_policy_rules);
 void ima_free_queue_entries(struct ima_namespace *ns);
+void ima_free_ns_status(struct ima_namespace *ns);
 
 static inline void get_ima_ns(struct ima_namespace *ns)
 {

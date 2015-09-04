@@ -5,6 +5,7 @@
  * Reiner Sailer      <sailer@watson.ibm.com>
  * Leendert van Doorn <leendert@watson.ibm.com>
  * Mimi Zohar         <zohar@us.ibm.com>
+ * Yuqiong Sun	      <suny@us.ibm.com>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -97,11 +98,11 @@ err_out:
 #ifdef CONFIG_IMA_LOAD_X509
 void __init ima_load_x509(void)
 {
-	int unset_flags = ima_policy_flag & IMA_APPRAISE;
+	int unset_flags = init_ima_ns.ima_policy_flag & IMA_APPRAISE;
 
-	ima_policy_flag &= ~unset_flags;
+	init_ima_ns.ima_policy_flag &= ~unset_flags;
 	integrity_load_x509(INTEGRITY_KEYRING_IMA, CONFIG_IMA_X509_PATH);
-	ima_policy_flag |= unset_flags;
+	init_ima_ns.ima_policy_flag |= unset_flags;
 }
 #endif
 
@@ -137,6 +138,10 @@ int __init ima_init(void)
 		return rc;
 
 	ima_init_policy();
+
+	rc = ima_ns_status_init();
+	if (rc != 0)
+		return rc;
 
 	return ima_fs_init();
 }

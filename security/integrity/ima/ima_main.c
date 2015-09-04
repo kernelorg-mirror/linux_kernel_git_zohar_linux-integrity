@@ -6,6 +6,7 @@
  * Serge Hallyn <serue@us.ibm.com>
  * Kylene Hall <kylene@us.ibm.com>
  * Mimi Zohar <zohar@us.ibm.com>
+ * Yuqiong Sun <suny@us.ibm.com>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -81,7 +82,8 @@ static void ima_rdwr_violation_check(struct file *file,
 				     int must_measure,
 				     char **pathbuf,
 				     const char **pathname,
-				     struct ima_namespace *ns)
+				     struct ima_namespace *ns,
+				     struct ns_status *status)
 {
 	struct inode *inode = file_inode(file);
 	char filename[NAME_MAX];
@@ -93,7 +95,7 @@ static void ima_rdwr_violation_check(struct file *file,
 			if (!iint)
 				iint = integrity_iint_find(inode);
 			/* IMA_MEASURE is set from reader side */
-			if (iint && (iint->flags & IMA_MEASURE))
+			if (iint && status && (status->flags & IMA_MEASURE))
 				send_tomtou = true;
 		}
 	} else {
@@ -118,17 +120,28 @@ static void ima_check_last_writer(struct integrity_iint_cache *iint,
 				  struct inode *inode, struct file *file)
 {
 	fmode_t mode = file->f_mode;
+	struct ns_status *status;
 
 	if (!(mode & FMODE_WRITE))
 		return;
 
 	inode_lock(inode);
-	if (atomic_read(&inode->i_writecount) == 1) {
-		if ((iint->version != inode->i_version) ||
-		    (iint->flags & IMA_NEW_FILE)) {
-			iint->flags &= ~(IMA_DONE_MASK | IMA_NEW_FILE);
-			iint->measured_pcrs = 0;
-			if (iint->flags & IMA_APPRAISE)
+	if (atomic_read(&inode->i_writecount) == 1 &&
+	    ((iint->version != inode->i_version) ||
+	     (iint->flags & IMA_NEW_FILE))) {
+		iint->flags &= ~(IMA_DONE_MASK | IMA_NEW_FILE);
+		if (iint->flags & IMA_APPRAISE)
+			ima_update_xattr(iint, file);
+		/* mark iint uncollected */
+		iint->flags &= ~(IMA_COLLECTED | IMA_NEW_FILE);
+		/* change flags for all ns status linked to this iint */
+		/* TODO: since inode->i_mutex cannot be used,
+		 * there should be some locks here
+		 */
+		list_for_each_entry(status, &iint->ns_list, ns_next) {
+			status->flags &= ~(IMA_DONE_MASK | IMA_NEW_FILE);
+			status->measured_pcrs = 0;
+			if (status->flags & IMA_APPRAISE)
 				ima_update_xattr(iint, file);
 		}
 	}
@@ -145,8 +158,15 @@ void ima_file_free(struct file *file)
 {
 	struct inode *inode = file_inode(file);
 	struct integrity_iint_cache *iint;
+	struct ima_namespace *ns;
 
-	if (!ima_policy_flag || !S_ISREG(inode->i_mode))
+	/* current->nsproxy may be null, why?? kernel thread? */
+	if (!current->nsproxy)
+		ns = &init_ima_ns;
+	else
+		ns = get_current_ns();
+
+	if (!ns->ima_policy_flag || !S_ISREG(inode->i_mode))
 		return;
 
 	iint = integrity_iint_find(inode);
@@ -171,18 +191,19 @@ static int process_measurement(struct file *file, char *buf, loff_t size,
 	int xattr_len = 0;
 	bool violation_check;
 	enum hash_algo hash_algo;
+	struct ns_status *status = NULL;
 	struct ima_namespace *ns = get_current_ns();
 
-	if (!ima_policy_flag || !S_ISREG(inode->i_mode))
+	if (!ns->ima_policy_flag || !S_ISREG(inode->i_mode))
 		return 0;
 
 	/* Return an IMA_MEASURE, IMA_APPRAISE, IMA_AUDIT action
 	 * bitmask based on the appraise/audit/measurement policy.
 	 * Included is the appraise submask.
 	 */
-	action = ima_get_action(inode, mask, func, &pcr);
+	action = ima_get_action(inode, mask, func, &pcr, ns);
 	violation_check = ((func == FILE_CHECK || func == MMAP_CHECK) &&
-			   (ima_policy_flag & IMA_MEASURE));
+			   (ns->ima_policy_flag & IMA_MEASURE));
 	if (!action && !violation_check)
 		return 0;
 
@@ -198,11 +219,16 @@ static int process_measurement(struct file *file, char *buf, loff_t size,
 		iint = integrity_inode_get(inode);
 		if (!iint)
 			goto out;
+
+		status = ima_get_ns_status(ns, iint);
+		if (!status)
+			goto out;
+
 	}
 
 	if (violation_check) {
 		ima_rdwr_violation_check(file, iint, action & IMA_MEASURE,
-					 &pathbuf, &pathname, ns);
+					 &pathbuf, &pathname, ns, status);
 		if (!action) {
 			rc = 0;
 			goto out_free;
@@ -213,12 +239,12 @@ static int process_measurement(struct file *file, char *buf, loff_t size,
 	 * (IMA_MEASURE, IMA_MEASURED, IMA_XXXX_APPRAISE, IMA_XXXX_APPRAISED,
 	 *  IMA_AUDIT, IMA_AUDITED)
 	 */
-	iint->flags |= action;
+	status->flags |= action;
 	action &= IMA_DO_MASK;
-	action &= ~((iint->flags & (IMA_DONE_MASK ^ IMA_MEASURED)) >> 1);
+	action &= ~((status->flags & (IMA_DONE_MASK ^ IMA_MEASURED)) >> 1);
 
 	/* If target pcr is already measured, unset IMA_MEASURE action */
-	if ((action & IMA_MEASURE) && (iint->measured_pcrs & (0x1 << pcr)))
+	if ((action & IMA_MEASURE) && (status->measured_pcrs & (0x1 << pcr)))
 		action ^= IMA_MEASURE;
 
 	/* Nothing to do, just return existing appraised status */
@@ -248,12 +274,12 @@ static int process_measurement(struct file *file, char *buf, loff_t size,
 
 	if (action & IMA_MEASURE)
 		ima_store_measurement(iint, file, pathname,
-				      xattr_value, xattr_len, pcr, ns);
+				      xattr_value, xattr_len, pcr, ns, status);
 	if (action & IMA_APPRAISE_SUBMASK)
 		rc = ima_appraise_measurement(func, iint, file, pathname,
 					      xattr_value, xattr_len, opened);
 	if (action & IMA_AUDIT)
-		ima_audit_measurement(iint, pathname);
+		ima_audit_measurement(iint, pathname, status);
 
 out_digsig:
 	if ((mask & MAY_WRITE) && (iint->flags & IMA_DIGSIG) &&
@@ -339,7 +365,8 @@ void ima_post_path_mknod(struct dentry *dentry)
 	struct inode *inode = dentry->d_inode;
 	int must_appraise;
 
-	must_appraise = ima_must_appraise(inode, MAY_ACCESS, FILE_CHECK);
+	must_appraise = ima_must_appraise(inode, MAY_ACCESS, FILE_CHECK,
+					  current_user_ns());
 	if (!must_appraise)
 		return;
 
@@ -427,7 +454,7 @@ static int __init init_ima(void)
 	error = ima_init();
 	if (!error) {
 		ima_initialized = 1;
-		ima_update_policy_flag();
+		ima_update_policy_flag(&init_ima_ns);
 	}
 	return error;
 }

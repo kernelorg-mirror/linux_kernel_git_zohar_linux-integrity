@@ -49,14 +49,19 @@ enum tpm_pcrs { TPM_PCR0 = 0, TPM_PCR8 = 8 };
 #define IMA_TEMPLATE_IMA_NAME "ima"
 #define IMA_TEMPLATE_IMA_FMT "d|n"
 
-/* current content of the policy */
-extern int ima_policy_flag;
-
 /* set during initialization */
 extern int ima_initialized;
 extern int ima_used_chip;
 extern int ima_hash_algo;
 extern int ima_appraise;
+
+struct ns_status {
+	struct list_head iint_next;
+	struct list_head ns_next;
+	unsigned long flags;
+	unsigned long measured_pcrs;
+	struct ima_namespace *ns;
+};
 
 /* IMA event related data */
 struct ima_event_data {
@@ -155,6 +160,9 @@ int ima_restore_measurement_list(loff_t bufsize, void *buf);
 int ima_measurements_show(struct seq_file *m, void *v);
 unsigned long ima_get_binary_runtime_size(void);
 int ima_init_template(void);
+int ima_ns_status_init(void);
+struct ns_status *ima_get_ns_status(struct ima_namespace *ns,
+				    struct integrity_iint_cache *iint);
 void ima_init_template_list(void);
 
 /*
@@ -194,7 +202,8 @@ enum ima_hooks {
 
 /* LIM API function definitions */
 int ima_get_action(struct inode *inode, int mask,
-		   enum ima_hooks func, int *pcr);
+		   enum ima_hooks func, int *pcr,
+		   struct ima_namespace *ns);
 int ima_must_measure(struct inode *inode, int mask, enum ima_hooks func);
 int ima_collect_measurement(struct integrity_iint_cache *iint,
 			    struct file *file, void *buf, loff_t size,
@@ -202,9 +211,11 @@ int ima_collect_measurement(struct integrity_iint_cache *iint,
 void ima_store_measurement(struct integrity_iint_cache *iint, struct file *file,
 			   const unsigned char *filename,
 			   struct evm_ima_xattr_data *xattr_value,
-			   int xattr_len, int pcr, struct ima_namespace *ns);
+			   int xattr_len, int pcr, struct ima_namespace *ns,
+			   struct ns_status *status);
 void ima_audit_measurement(struct integrity_iint_cache *iint,
-			   const unsigned char *filename);
+			   const unsigned char *filename,
+			   struct ns_status *status);
 int ima_alloc_init_template(struct ima_event_data *event_data,
 			    struct ima_template_entry **entry);
 int ima_store_template(struct ima_template_entry *entry, int violation,
@@ -215,13 +226,13 @@ const char *ima_d_path(const struct path *path, char **pathbuf, char *filename);
 
 /* IMA policy related functions */
 int ima_match_policy(struct inode *inode, enum ima_hooks func, int mask,
-		     int flags, int *pcr);
+		     int flags, int *pcr, struct user_namespace *user_ns);
 void ima_init_policy(void);
-void ima_update_policy(void);
-void ima_update_policy_flag(void);
-ssize_t ima_parse_add_rule(char *);
-void ima_delete_rules(void);
-int ima_check_policy(void);
+void ima_update_policy(struct ima_namespace *ns);
+void ima_update_policy_flag(struct ima_namespace *ns);
+ssize_t ima_parse_add_rule(char *rule, struct ima_namespace *ns);
+void ima_delete_rules(struct list_head *ima_policy_rules);
+int ima_check_policy(struct ima_namespace *ns);
 void *ima_policy_start(struct seq_file *m, loff_t *pos);
 void *ima_policy_next(struct seq_file *m, void *v, loff_t *pos);
 void ima_policy_stop(struct seq_file *m, void *v);
@@ -241,7 +252,8 @@ int ima_appraise_measurement(enum ima_hooks func,
 			     struct file *file, const unsigned char *filename,
 			     struct evm_ima_xattr_data *xattr_value,
 			     int xattr_len, int opened);
-int ima_must_appraise(struct inode *inode, int mask, enum ima_hooks func);
+int ima_must_appraise(struct inode *inode, int mask, enum ima_hooks func,
+		      struct user_namespace *user_ns);
 void ima_update_xattr(struct integrity_iint_cache *iint, struct file *file);
 enum integrity_status ima_get_cache_status(struct integrity_iint_cache *iint,
 					   enum ima_hooks func);
@@ -316,9 +328,9 @@ static inline int security_filter_rule_match(u32 secid, u32 field, u32 op,
 #endif /* CONFIG_IMA_LSM_RULES */
 
 #ifdef	CONFIG_IMA_READ_POLICY
-#define	POLICY_FILE_FLAGS	(S_IWUSR | S_IRUSR)
+#define	POLICY_FILE_FLAGS	0666 /* rw-rw-rw- */
 #else
-#define	POLICY_FILE_FLAGS	S_IWUSR
+#define	POLICY_FILE_FLAGS	0222 /* -w--w--w- */
 #endif /* CONFIG_IMA_READ_POLICY */
 
 #endif /* __LINUX_IMA_H */

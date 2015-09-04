@@ -79,7 +79,6 @@ static void iint_free(struct integrity_iint_cache *iint)
 	iint->ima_bprm_status = INTEGRITY_UNKNOWN;
 	iint->ima_read_status = INTEGRITY_UNKNOWN;
 	iint->evm_status = INTEGRITY_UNKNOWN;
-	iint->measured_pcrs = 0;
 	kmem_cache_free(iint_cache, iint);
 }
 
@@ -120,6 +119,8 @@ struct integrity_iint_cache *integrity_inode_get(struct inode *inode)
 	iint->inode = inode;
 	node = &iint->rb_node;
 	inode->i_flags |= S_IMA;
+	/* namespace list */
+	INIT_LIST_HEAD(&iint->ns_list);
 	rb_link_node(node, parent, p);
 	rb_insert_color(node, &integrity_iint_tree);
 
@@ -145,6 +146,8 @@ void integrity_inode_free(struct inode *inode)
 	rb_erase(&iint->rb_node, &integrity_iint_tree);
 	write_unlock(&integrity_iint_lock);
 
+	ima_iint_clear_ns_list(iint);
+
 	iint_free(iint);
 }
 
@@ -160,7 +163,6 @@ static void init_once(void *foo)
 	iint->ima_bprm_status = INTEGRITY_UNKNOWN;
 	iint->ima_read_status = INTEGRITY_UNKNOWN;
 	iint->evm_status = INTEGRITY_UNKNOWN;
-	iint->measured_pcrs = 0;
 }
 
 static int __init integrity_iintcache_init(void)

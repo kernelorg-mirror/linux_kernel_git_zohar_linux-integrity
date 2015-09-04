@@ -272,7 +272,7 @@ static const struct file_operations ima_ascii_measurements_ops = {
 	.release = seq_release,
 };
 
-static ssize_t ima_read_policy(char *path)
+static ssize_t ima_read_policy(char *path, struct ima_namespace *ns)
 {
 	void *data;
 	char *datap;
@@ -294,7 +294,7 @@ static ssize_t ima_read_policy(char *path)
 	datap = data;
 	while (size > 0 && (p = strsep(&datap, "\n"))) {
 		pr_debug("rule: %s\n", p);
-		rc = ima_parse_add_rule(p);
+		rc = ima_parse_add_rule(p, ns);
 		if (rc < 0)
 			break;
 		size -= rc;
@@ -309,8 +309,9 @@ static ssize_t ima_read_policy(char *path)
 		return pathlen;
 }
 
-static ssize_t ima_write_policy(struct file *file, const char __user *buf,
-				size_t datalen, loff_t *ppos)
+ssize_t ima_write_policy_ns(struct file *file, const char __user *buf,
+			    size_t datalen, loff_t *ppos,
+			    struct ima_namespace *ns)
 {
 	char *data;
 	ssize_t result;
@@ -334,7 +335,7 @@ static ssize_t ima_write_policy(struct file *file, const char __user *buf,
 		goto out_free;
 
 	if (data[0] == '/') {
-		result = ima_read_policy(data);
+		result = ima_read_policy(data, ns);
 	} else if (ima_appraise & IMA_APPRAISE_POLICY) {
 		pr_err("IMA: signed policy file (specified as an absolute pathname) required\n");
 		integrity_audit_msg(AUDIT_INTEGRITY_STATUS, NULL, NULL,
@@ -343,7 +344,7 @@ static ssize_t ima_write_policy(struct file *file, const char __user *buf,
 		if (ima_appraise & IMA_APPRAISE_ENFORCE)
 			result = -EACCES;
 	} else {
-		result = ima_parse_add_rule(data);
+		result = ima_parse_add_rule(data, ns);
 	}
 	mutex_unlock(&ima_write_mutex);
 out_free:
@@ -355,18 +356,22 @@ out:
 	return result;
 }
 
+static ssize_t ima_write_policy(struct file *file, const char __user *buf,
+				size_t datalen, loff_t *ppos)
+{
+	struct ima_namespace *ns = get_current_ns();
+
+	if (ns)
+		return ima_write_policy_ns(file, buf, datalen, ppos, ns);
+	return -EINVAL;
+}
+
 static struct dentry *ima_dir;
 static struct dentry *binary_runtime_measurements;
 static struct dentry *ascii_runtime_measurements;
 static struct dentry *runtime_measurements_count;
 static struct dentry *violations;
 static struct dentry *ima_policy;
-
-enum ima_fs_flags {
-	IMA_FS_BUSY,
-};
-
-static unsigned long ima_fs_flags;
 
 #ifdef	CONFIG_IMA_READ_POLICY
 static const struct seq_operations ima_policy_seqops = {
@@ -380,7 +385,8 @@ static const struct seq_operations ima_policy_seqops = {
 /*
  * ima_open_policy: sequentialize access to the policy file
  */
-static int ima_open_policy(struct inode *inode, struct file *filp)
+int ima_open_policy_ns(struct inode *inode, struct file *filp,
+		       struct ima_namespace *ns)
 {
 	if (!(filp->f_flags & O_WRONLY)) {
 #ifndef	CONFIG_IMA_READ_POLICY
@@ -388,14 +394,26 @@ static int ima_open_policy(struct inode *inode, struct file *filp)
 #else
 		if ((filp->f_flags & O_ACCMODE) != O_RDONLY)
 			return -EACCES;
-		if (!capable(CAP_SYS_ADMIN))
+		if (!ns_capable(ns->user_ns, CAP_SYS_ADMIN))
 			return -EPERM;
 		return seq_open(filp, &ima_policy_seqops);
 #endif
 	}
-	if (test_and_set_bit(IMA_FS_BUSY, &ima_fs_flags))
+	/* policy can only be written once */
+	if (ns->nr_extents != 0)
+		return -EPERM;
+	if (test_and_set_bit(IMA_FS_BUSY, &ns->ima_fs_flags))
 		return -EBUSY;
 	return 0;
+}
+
+static int ima_open_policy(struct inode *inode, struct file *filp)
+{
+	struct ima_namespace *ns = get_current_ns();
+
+	if (ns)
+		return ima_open_policy_ns(inode, filp, ns);
+	return -EINVAL;
 }
 
 /*
@@ -405,14 +423,15 @@ static int ima_open_policy(struct inode *inode, struct file *filp)
  * point to the new policy rules, and remove the securityfs policy file,
  * assuming a valid policy.
  */
-static int ima_release_policy(struct inode *inode, struct file *file)
+int ima_release_policy_ns(struct inode *inode, struct file *file,
+			  struct ima_namespace *ns)
 {
-	const char *cause = valid_policy ? "completed" : "failed";
+	const char *cause = ns->nr_extents ? "completed" : "failed";
 
 	if ((file->f_flags & O_ACCMODE) == O_RDONLY)
 		return seq_release(inode, file);
 
-	if (valid_policy && ima_check_policy() < 0) {
+	if (valid_policy && ima_check_policy(ns) < 0) {
 		cause = "failed";
 		valid_policy = 0;
 	}
@@ -421,21 +440,30 @@ static int ima_release_policy(struct inode *inode, struct file *file)
 	integrity_audit_msg(AUDIT_INTEGRITY_STATUS, NULL, NULL,
 			    "policy_update", cause, !valid_policy, 0);
 
-	if (!valid_policy) {
-		ima_delete_rules();
-		valid_policy = 1;
-		clear_bit(IMA_FS_BUSY, &ima_fs_flags);
+	if (!ns->nr_extents) {
+		ima_delete_rules(get_ima_policy_rules(ns));
+		ns->nr_extents = 0;
+		clear_bit(IMA_FS_BUSY, &ns->ima_fs_flags);
 		return 0;
 	}
 
-	ima_update_policy();
+	ima_update_policy(ns);
 #if !defined(CONFIG_IMA_WRITE_POLICY) && !defined(CONFIG_IMA_READ_POLICY)
-	securityfs_remove(ima_policy);
+	securityfs_remove(&ns->ima_policy);
 	ima_policy = NULL;
 #elif defined(CONFIG_IMA_WRITE_POLICY)
-	clear_bit(IMA_FS_BUSY, &ima_fs_flags);
+	clear_bit(IMA_FS_BUSY, &ns->ima_fs_flags);
 #endif
 	return 0;
+}
+
+int ima_release_policy(struct inode *inode, struct file *file)
+{
+	struct ima_namespace *ns = get_current_ns();
+
+	if (ns)
+		return ima_release_policy_ns(inode, file, ns);
+	return -EINVAL;
 }
 
 static const struct file_operations ima_measure_policy_ops = {
