@@ -48,30 +48,31 @@ static bool init_keyring __initdata;
 #define restrict_link_to_ima restrict_link_by_builtin_trusted
 #endif
 
-int integrity_digsig_verify(const unsigned int id, const char *sig, int siglen,
-			    const char *digest, int digestlen)
+int integrity_digsig_verify(struct ima_namespace *ns, const char *sig,
+			    int siglen, const char *digest, int digestlen)
 {
-	if (id >= INTEGRITY_KEYRING_MAX || siglen < 2)
-		return -EINVAL;
+	struct key *ima_keyring;
 
-	if (!keyring[id]) {
-		keyring[id] =
-			request_key(&key_type_keyring, keyring_name[id], NULL);
-		if (IS_ERR(keyring[id])) {
-			int err = PTR_ERR(keyring[id]);
-			pr_err("no %s keyring: %d\n", keyring_name[id], err);
-			keyring[id] = NULL;
+	if (!ns->keyring[0]) {
+		ima_keyring =
+			request_key(&key_type_keyring, ns->ima_keyring, NULL);
+		if (IS_ERR(ima_keyring)) {
+			int err = PTR_ERR(ima_keyring);
+
+			pr_err("no %s keyring: %d\n", ns->ima_keyring, err);
+			ima_keyring = NULL;
 			return err;
 		}
+		ns->keyring[0] = ima_keyring;
 	}
 
 	switch (sig[1]) {
 	case 1:
 		/* v1 API expect signature without xattr type */
-		return digsig_verify(keyring[id], sig + 1, siglen - 1,
+		return digsig_verify(ns->keyring[0], sig + 1, siglen - 1,
 				     digest, digestlen);
 	case 2:
-		return asymmetric_verify(keyring[id], sig, siglen,
+		return asymmetric_verify(ns->keyring[0], sig, siglen,
 					 digest, digestlen);
 	}
 

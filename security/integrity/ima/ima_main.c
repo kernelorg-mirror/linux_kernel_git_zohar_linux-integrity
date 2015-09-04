@@ -176,7 +176,7 @@ void ima_file_free(struct file *file)
 	else
 		ns = get_current_ns();
 
-	if (!ns->ima_policy_flag || !S_ISREG(inode->i_mode))
+	if (!ns || !ns->ima_policy_flag || !S_ISREG(inode->i_mode))
 		return;
 
 	iint = integrity_iint_find(inode);
@@ -201,6 +201,7 @@ static int process_measurement(struct file *file, char *buf, loff_t size,
 	int xattr_len = 0;
 	bool violation_check;
 	enum hash_algo hash_algo;
+	bool already_appraised = false;
 	struct ns_status *status = NULL;
 	struct ima_namespace *ns = get_current_ns();
 
@@ -227,6 +228,10 @@ static int process_measurement(struct file *file, char *buf, loff_t size,
 			continue;
 
 		must_appraise = action & IMA_APPRAISE;
+		if (!already_appraised)
+			must_appraise = action & IMA_APPRAISE;
+		else
+			must_appraise = 0;
 
 		/*  Is the appraise rule hook specific?  */
 		if (action & IMA_FILE_APPRAISE)
@@ -285,7 +290,7 @@ static int process_measurement(struct file *file, char *buf, loff_t size,
 		/* Nothing to do, just return existing appraised status */
 		if (!action) {
 			if (must_appraise)
-				rc = ima_get_cache_status(iint, func);
+				rc = ima_get_cache_status(status, func);
 			if ((mask & MAY_WRITE) && (status->flags & IMA_DIGSIG))
 				rc = -EACCES;
 			inode_unlock(inode);
@@ -329,10 +334,13 @@ static int process_measurement(struct file *file, char *buf, loff_t size,
 			ima_store_measurement(iint, file, pathname,
 					      xattr_value, xattr_len,
 					      pcr, ns, status);
-		if (action & IMA_APPRAISE_SUBMASK)
+		if ((action & IMA_APPRAISE_SUBMASK) && !already_appraised) {
 			rc = ima_appraise_measurement(func, iint, file,
 						      pathname, xattr_value,
-						      xattr_len, opened);
+						      xattr_len, opened,
+						      ns, status);
+			already_appraised = true;
+		}
 		if (action & IMA_AUDIT)
 			ima_audit_measurement(iint, pathname, status);
 

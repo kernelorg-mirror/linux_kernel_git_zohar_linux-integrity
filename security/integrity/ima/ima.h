@@ -62,6 +62,10 @@ struct ns_status {
 	unsigned long flags;
 	unsigned long measured_pcrs;
 	struct ima_namespace *ns;
+	enum integrity_status ima_file_status:4;
+	enum integrity_status ima_mmap_status:4;
+	enum integrity_status ima_bprm_status:4;
+	enum integrity_status ima_read_status:4;
 };
 
 /* IMA event related data */
@@ -245,11 +249,13 @@ int ima_appraise_measurement(enum ima_hooks func,
 			     struct integrity_iint_cache *iint,
 			     struct file *file, const unsigned char *filename,
 			     struct evm_ima_xattr_data *xattr_value,
-			     int xattr_len, int opened);
+			     int xattr_len, int opened,
+			     struct ima_namespace *ns,
+			     struct ns_status *ns_status);
 int ima_must_appraise(struct inode *inode, int mask, enum ima_hooks func,
 		      struct ima_namespace *ns);
 void ima_update_xattr(struct integrity_iint_cache *iint, struct file *file);
-enum integrity_status ima_get_cache_status(struct integrity_iint_cache *iint,
+enum integrity_status ima_get_cache_status(struct ns_status *status,
 					   enum ima_hooks func);
 enum hash_algo ima_get_hash_algo(struct evm_ima_xattr_data *xattr_value,
 				 int xattr_len);
@@ -262,7 +268,9 @@ static inline int ima_appraise_measurement(enum ima_hooks func,
 					   struct file *file,
 					   const unsigned char *filename,
 					   struct evm_ima_xattr_data *xattr_value,
-					   int xattr_len, int opened)
+					   int xattr_len, int opened,
+					   struct ima_namespace *ns,
+					   struct ns_status *ns_status)
 {
 	return INTEGRITY_UNKNOWN;
 }
