@@ -50,13 +50,13 @@ bool is_ima_appraise_enabled(void)
  * Return 1 to appraise
  */
 int ima_must_appraise(struct inode *inode, int mask, enum ima_hooks func,
-		      struct user_namespace *user_ns)
+		      struct ima_namespace *ns)
 {
 	if (!ima_appraise)
 		return 0;
 
 	return ima_match_policy(inode, func, mask,
-				IMA_APPRAISE, NULL, user_ns);
+				IMA_APPRAISE, NULL, ns);
 }
 
 static int ima_fix_xattr(struct dentry *dentry,
@@ -352,7 +352,7 @@ void ima_inode_post_setattr(struct dentry *dentry)
 
 	/* Temporary fix */
 	must_appraise = ima_must_appraise(inode, MAY_ACCESS, POST_SETATTR,
-					  current_user_ns());
+					  get_current_ns());
 	iint = integrity_iint_find(inode);
 	if (iint) {
 		iint->flags &= ~(IMA_APPRAISE | IMA_APPRAISED |

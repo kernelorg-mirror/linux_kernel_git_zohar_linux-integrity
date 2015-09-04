@@ -57,7 +57,12 @@ struct ima_namespace {
 
 extern struct ima_namespace init_ima_ns;
 extern struct list_head ima_default_rules;
-static inline struct list_head *get_measurements(void)
+static inline struct list_head *get_measurements(struct ima_namespace *ns)
+{
+	return &ns->ima_measurements;
+}
+
+static inline struct list_head *get_current_measurements(void)
 {
 	return &current->nsproxy->ima_ns->ima_measurements;
 }

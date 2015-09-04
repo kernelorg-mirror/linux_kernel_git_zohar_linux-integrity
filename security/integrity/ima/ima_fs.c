@@ -56,6 +56,9 @@ static ssize_t ima_show_htable_violations(struct file *filp,
 {
 	struct ima_namespace *ns = get_current_ns();
 
+	if (!ns_capable(ns->user_ns, CAP_SYS_ADMIN))
+		return -EPERM;
+
 	return ima_show_htable_value(buf, count,
 				     ppos, &ns->ima_htable.violations);
 }
@@ -70,6 +73,9 @@ static ssize_t ima_show_measurements_count(struct file *filp,
 					   size_t count, loff_t *ppos)
 {
 	struct ima_namespace *ns = get_current_ns();
+
+	if (!ns_capable(ns->user_ns, CAP_SYS_ADMIN))
+		return -EPERM;
 
 	return ima_show_htable_value(buf, count, ppos, &ns->ima_htable.len);
 
@@ -88,7 +94,7 @@ static void *ima_measurements_start(struct seq_file *m, loff_t *pos)
 
 	/* we need a lock since pos could point beyond last element */
 	rcu_read_lock();
-	list_for_each_entry_rcu(qe, get_measurements(), later) {
+	list_for_each_entry_rcu(qe, get_current_measurements(), later) {
 		if (!l--) {
 			rcu_read_unlock();
 			return qe;
@@ -110,7 +116,7 @@ static void *ima_measurements_next(struct seq_file *m, void *v, loff_t *pos)
 	rcu_read_unlock();
 	(*pos)++;
 
-	return (&qe->later == get_measurements()) ? NULL : qe;
+	return (&qe->later == get_current_measurements()) ? NULL : qe;
 }
 
 static void ima_measurements_stop(struct seq_file *m, void *v)
@@ -201,6 +207,11 @@ static const struct seq_operations ima_measurments_seqops = {
 
 static int ima_measurements_open(struct inode *inode, struct file *file)
 {
+	struct ima_namespace *ns = get_current_ns();
+
+	if (!ns_capable(ns->user_ns, CAP_SYS_ADMIN))
+		return -EPERM;
+
 	return seq_open(file, &ima_measurments_seqops);
 }
 
@@ -267,6 +278,11 @@ static const struct seq_operations ima_ascii_measurements_seqops = {
 
 static int ima_ascii_measurements_open(struct inode *inode, struct file *file)
 {
+	struct ima_namespace *ns = get_current_ns();
+
+	if (!ns_capable(ns->user_ns, CAP_SYS_ADMIN))
+		return -EPERM;
+
 	return seq_open(file, &ima_ascii_measurements_seqops);
 }
 
@@ -487,27 +503,27 @@ int __init ima_fs_init(void)
 
 	binary_runtime_measurements =
 	    securityfs_create_file("binary_runtime_measurements",
-				   S_IRUSR | S_IRGRP, ima_dir, NULL,
+				   0444, ima_dir, NULL,
 				   &ima_measurements_ops);
 	if (IS_ERR(binary_runtime_measurements))
 		goto out;
 
 	ascii_runtime_measurements =
 	    securityfs_create_file("ascii_runtime_measurements",
-				   S_IRUSR | S_IRGRP, ima_dir, NULL,
+				   0444, ima_dir, NULL,
 				   &ima_ascii_measurements_ops);
 	if (IS_ERR(ascii_runtime_measurements))
 		goto out;
 
 	runtime_measurements_count =
 	    securityfs_create_file("runtime_measurements_count",
-				   S_IRUSR | S_IRGRP, ima_dir, NULL,
+				   0444, ima_dir, NULL,
 				   &ima_measurements_count_ops);
 	if (IS_ERR(runtime_measurements_count))
 		goto out;
 
 	violations =
-	    securityfs_create_file("violations", S_IRUSR | S_IRGRP,
+	    securityfs_create_file("violations", 0444,
 				   ima_dir, NULL, &ima_htable_violations_ops);
 	if (IS_ERR(violations))
 		goto out;

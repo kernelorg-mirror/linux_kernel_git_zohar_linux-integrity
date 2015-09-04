@@ -368,18 +368,18 @@ static int get_subaction(struct ima_rule_entry *rule, enum ima_hooks func)
  * than writes so ima_match_policy() is classical RCU candidate.
  */
 int ima_match_policy(struct inode *inode, enum ima_hooks func, int mask,
-		     int flags, int *pcr, struct user_namespace *user_ns)
+		     int flags, int *pcr, struct ima_namespace *ns)
 {
 	struct ima_rule_entry *entry;
 	int action = 0, actmask = flags | (flags << 1);
 
 	rcu_read_lock();
-	list_for_each_entry_rcu(entry, *get_current_ima_rules(), list) {
+	list_for_each_entry_rcu(entry, *get_ima_rules(ns), list) {
 
 		if (!(entry->action & actmask))
 			continue;
 
-		if (!ima_match_rules(entry, inode, func, mask, user_ns))
+		if (!ima_match_rules(entry, inode, func, mask, ns->user_ns))
 			continue;
 
 		action |= entry->flags & IMA_ACTION_FLAGS;

@@ -212,7 +212,7 @@ int ima_get_action(struct inode *inode, int mask, enum ima_hooks func,
 	flags &= ns->ima_policy_flag;
 
 	return ima_match_policy(inode, func, mask,
-				flags, pcr, ns->user_ns);
+				flags, pcr, ns);
 }
 
 /*

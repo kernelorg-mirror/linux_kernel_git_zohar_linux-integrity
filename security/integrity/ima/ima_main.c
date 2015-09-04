@@ -39,6 +39,16 @@ int ima_appraise;
 int ima_hash_algo = HASH_ALGO_SHA1;
 static int hash_setup_done;
 
+static int check_rc(int rc, char *pathbuf, int must_appraise)
+{
+	if (pathbuf)
+		__putname(pathbuf);
+
+	if ((rc && must_appraise) && (ima_appraise & IMA_APPRAISE_ENFORCE))
+		return -EACCES;
+	return 0;
+}
+
 static int __init hash_setup(char *str)
 {
 	struct ima_template_desc *template_desc = ima_template_desc_current();
@@ -185,7 +195,7 @@ static int process_measurement(struct file *file, char *buf, loff_t size,
 	char *pathbuf = NULL;
 	char filename[NAME_MAX];
 	const char *pathname = NULL;
-	int rc = -ENOMEM, action, must_appraise;
+	int rc, action, must_appraise;
 	int pcr = CONFIG_IMA_MEASURE_PCR_IDX;
 	struct evm_ima_xattr_data *xattr_value = NULL;
 	int xattr_len = 0;
@@ -194,105 +204,149 @@ static int process_measurement(struct file *file, char *buf, loff_t size,
 	struct ns_status *status = NULL;
 	struct ima_namespace *ns = get_current_ns();
 
-	if (!ns->ima_policy_flag || !S_ISREG(inode->i_mode))
-		return 0;
+	do {
+		rc = -ENOMEM;
+		pathbuf = NULL;
+		action = 0;
+		status = NULL;
+		xattr_value = NULL;
+		xattr_len = 0;
+		violation_check = 0;
 
-	/* Return an IMA_MEASURE, IMA_APPRAISE, IMA_AUDIT action
-	 * bitmask based on the appraise/audit/measurement policy.
-	 * Included is the appraise submask.
-	 */
-	action = ima_get_action(inode, mask, func, &pcr, ns);
-	violation_check = ((func == FILE_CHECK || func == MMAP_CHECK) &&
-			   (ns->ima_policy_flag & IMA_MEASURE));
-	if (!action && !violation_check)
-		return 0;
+		if (!ns->ima_policy_flag || !S_ISREG(inode->i_mode))
+			continue;
 
-	must_appraise = action & IMA_APPRAISE;
+		/* Return an IMA_MEASURE, IMA_APPRAISE, IMA_AUDIT action
+		 * bitmask based on the appraise/audit/measurement policy.
+		 * Included is the appraise submask.
+		 */
+		action = ima_get_action(inode, mask, func, &pcr, ns);
+		violation_check = ((func == FILE_CHECK || func == MMAP_CHECK) &&
+				   (ns->ima_policy_flag & IMA_MEASURE));
+		if (!action && !violation_check)
+			continue;
 
-	/*  Is the appraise rule hook specific?  */
-	if (action & IMA_FILE_APPRAISE)
-		func = FILE_CHECK;
+		must_appraise = action & IMA_APPRAISE;
 
-	inode_lock(inode);
+		/*  Is the appraise rule hook specific?  */
+		if (action & IMA_FILE_APPRAISE)
+			func = FILE_CHECK;
 
-	if (action) {
-		iint = integrity_inode_get(inode);
-		if (!iint)
-			goto out;
+		inode_lock(inode);
 
-		status = ima_get_ns_status(ns, iint);
-		if (!status)
-			goto out;
+		if (action) {
+			iint = integrity_inode_get(inode);
+			if (!iint) {
+				inode_unlock(inode);
+				if (check_rc(rc, pathbuf, must_appraise) != 0)
+					return -EACCES;
+				continue;
+			}
 
-	}
-
-	if (violation_check) {
-		ima_rdwr_violation_check(file, iint, action & IMA_MEASURE,
-					 &pathbuf, &pathname, ns, status);
-		if (!action) {
-			rc = 0;
-			goto out_free;
+			status = ima_get_ns_status(ns, iint);
+			if (!status) {
+				inode_unlock(inode);
+				if (check_rc(rc, pathbuf, must_appraise) != 0)
+					return -EACCES;
+				continue;
+			}
 		}
-	}
 
-	/* Determine if already appraised/measured based on bitmask
-	 * (IMA_MEASURE, IMA_MEASURED, IMA_XXXX_APPRAISE, IMA_XXXX_APPRAISED,
-	 *  IMA_AUDIT, IMA_AUDITED)
-	 */
-	status->flags |= action;
-	action &= IMA_DO_MASK;
-	action &= ~((status->flags & (IMA_DONE_MASK ^ IMA_MEASURED)) >> 1);
+		if (violation_check) {
+			ima_rdwr_violation_check(file, iint,
+						 action & IMA_MEASURE,
+						 &pathbuf, &pathname,
+						 ns, status);
+			if (!action) {
+				rc = 0;
+				inode_unlock(inode);
+				if (check_rc(rc, pathbuf, must_appraise) != 0)
+					return -EACCES;
+				continue;
+			}
+		}
 
-	/* If target pcr is already measured, unset IMA_MEASURE action */
-	if ((action & IMA_MEASURE) && (status->measured_pcrs & (0x1 << pcr)))
-		action ^= IMA_MEASURE;
+		/* Determine if already appraised/measured based on bitmask
+		 * (IMA_MEASURE, IMA_MEASURED, IMA_XXXX_APPRAISE,
+		 *  IMA_XXXX_APPRAISED, IMA_AUDIT, IMA_AUDITED)
+		 */
+		status->flags |= action;
+		action &= IMA_DO_MASK;
+		action &= ~((status->flags &
+			  (IMA_DONE_MASK ^ IMA_MEASURED)) >> 1);
 
-	/* Nothing to do, just return existing appraised status */
-	if (!action) {
-		if (must_appraise)
-			rc = ima_get_cache_status(iint, func);
-		goto out_digsig;
-	}
+		/* If target pcr is already measured,
+		 * unset IMA_MEASURE action
+		 */
+		if ((action & IMA_MEASURE) &&
+		    (status->measured_pcrs & (0x1 << pcr)))
+			action ^= IMA_MEASURE;
 
-	template_desc = ima_template_desc_current();
-	if ((action & IMA_APPRAISE_SUBMASK) ||
+		/* Nothing to do, just return existing appraised status */
+		if (!action) {
+			if (must_appraise)
+				rc = ima_get_cache_status(iint, func);
+			if ((mask & MAY_WRITE) && (status->flags & IMA_DIGSIG))
+				rc = -EACCES;
+			inode_unlock(inode);
+			kfree(xattr_value);
+			if (check_rc(rc, pathbuf, must_appraise) != 0)
+				return -EACCES;
+			continue;
+		}
+
+		template_desc = ima_template_desc_current();
+		if ((action & IMA_APPRAISE_SUBMASK) ||
 		    strcmp(template_desc->name, IMA_TEMPLATE_IMA_NAME) != 0)
-		/* read 'security.ima' */
-		xattr_len = ima_read_xattr(file_dentry(file), &xattr_value);
+			/* read 'security.ima' */
+			xattr_len = ima_read_xattr(file_dentry(file),
+						   &xattr_value);
 
-	hash_algo = ima_get_hash_algo(xattr_value, xattr_len);
+		hash_algo = ima_get_hash_algo(xattr_value, xattr_len);
 
-	rc = ima_collect_measurement(iint, file, buf, size, hash_algo);
-	if (rc != 0) {
-		if (file->f_flags & O_DIRECT)
-			rc = (iint->flags & IMA_PERMIT_DIRECTIO) ? 0 : -EACCES;
-		goto out_digsig;
-	}
+		rc = ima_collect_measurement(iint, file, buf, size, hash_algo);
+		if (rc != 0) {
+			if (file->f_flags & O_DIRECT) {
+				if (iint->flags & IMA_PERMIT_DIRECTIO)
+					rc = 0;
+				else
+					rc = -EACCES;
+			}
+			if ((mask & MAY_WRITE) && (status->flags & IMA_DIGSIG))
+				rc = -EACCES;
+			inode_unlock(inode);
+			kfree(xattr_value);
+			if (check_rc(rc, pathbuf, must_appraise) != 0)
+				return -EACCES;
+			continue;
+		}
 
-	if (!pathbuf)	/* ima_rdwr_violation possibly pre-fetched */
-		pathname = ima_d_path(&file->f_path, &pathbuf, filename);
+		if (!pathname)	/* ima_rdwr_violation possibly pre-fetched */
+			pathname = ima_d_path(&file->f_path,
+					      &pathbuf, filename);
 
-	if (action & IMA_MEASURE)
-		ima_store_measurement(iint, file, pathname,
-				      xattr_value, xattr_len, pcr, ns, status);
-	if (action & IMA_APPRAISE_SUBMASK)
-		rc = ima_appraise_measurement(func, iint, file, pathname,
-					      xattr_value, xattr_len, opened);
-	if (action & IMA_AUDIT)
-		ima_audit_measurement(iint, pathname, status);
+		if (action & IMA_MEASURE)
+			ima_store_measurement(iint, file, pathname,
+					      xattr_value, xattr_len,
+					      pcr, ns, status);
+		if (action & IMA_APPRAISE_SUBMASK)
+			rc = ima_appraise_measurement(func, iint, file,
+						      pathname, xattr_value,
+						      xattr_len, opened);
+		if (action & IMA_AUDIT)
+			ima_audit_measurement(iint, pathname, status);
 
-out_digsig:
-	if ((mask & MAY_WRITE) && (iint->flags & IMA_DIGSIG) &&
-	     !(iint->flags & IMA_NEW_FILE))
-		rc = -EACCES;
-	kfree(xattr_value);
-out_free:
-	if (pathbuf)
-		__putname(pathbuf);
-out:
-	inode_unlock(inode);
-	if ((rc && must_appraise) && (ima_appraise & IMA_APPRAISE_ENFORCE))
-		return -EACCES;
+		if ((mask & MAY_WRITE) && (status->flags & IMA_DIGSIG))
+			rc = -EACCES;
+
+		kfree(xattr_value);
+		inode_unlock(inode);
+
+		if (check_rc(rc, pathbuf, must_appraise) != 0)
+			return -EACCES;
+
+	} while ((ns = ns->parent));
+
 	return 0;
 }
 
@@ -366,7 +420,7 @@ void ima_post_path_mknod(struct dentry *dentry)
 	int must_appraise;
 
 	must_appraise = ima_must_appraise(inode, MAY_ACCESS, FILE_CHECK,
-					  current_user_ns());
+					  get_current_ns());
 	if (!must_appraise)
 		return;
 
