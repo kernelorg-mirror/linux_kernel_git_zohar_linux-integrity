@@ -34,6 +34,11 @@ struct ima_namespace init_ima_ns = {
 	.ima_fs_flags = 0,
 	.ima_policy_flag = 0,
 	.iint_list = LIST_HEAD_INIT(init_ima_ns.iint_list),
+#ifndef CONFIG_IMA_TRUSTED_KEYRING
+	.ima_keyring = "_ima",
+#else
+	.ima_keyring = ".ima",
+#endif
 	.ima_htable = {
 		.len = ATOMIC_LONG_INIT(0),
 		.violations = ATOMIC_LONG_INIT(0),

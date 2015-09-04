@@ -16,6 +16,11 @@
 #include <linux/sched/task.h>
 #include <linux/capability.h>
 #include <linux/cred.h>
+#include <linux/random.h>
+#include <linux/key.h>
+#include <linux/key-type.h>
+
+static DEFINE_MUTEX(key_user_keyring_mutex);
 
 static struct ima_namespace *create_ima_ns(void)
 {
@@ -45,10 +50,11 @@ static struct ima_namespace *clone_ima_ns(struct user_namespace *user_ns,
 		return ERR_PTR(-ENOMEM);
 
 	err = ns_alloc_inum(&ns->ns);
-	if (err) {
-		kfree(ns);
-		return ERR_PTR(err);
-	}
+	if (err)
+		goto error;
+
+	strncpy(ns->ima_keyring, "_ima", sizeof(ns->ima_keyring));
+	ns->keyring[0] = NULL;
 
 	ns->ns.ops = &imans_operations;
 	get_ima_ns(old_ns);
@@ -70,6 +76,10 @@ static struct ima_namespace *clone_ima_ns(struct user_namespace *user_ns,
 	ima_update_policy_flag(ns);
 
 	return ns;
+
+error:
+	kfree(ns);
+	return ERR_PTR(err);
 }
 
 /**
@@ -103,6 +113,8 @@ struct ima_namespace *copy_ima(unsigned long flags,
 
 static void destroy_ima_ns(struct ima_namespace *ns)
 {
+	if (ns->keyring[0])
+		key_put(ns->keyring[0]);
 	put_user_ns(ns->user_ns);
 	ns_free_inum(&ns->ns);
 	ima_delete_rules(&ns->ima_policy_rules);

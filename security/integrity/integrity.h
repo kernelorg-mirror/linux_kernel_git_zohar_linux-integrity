@@ -126,7 +126,9 @@ int __init integrity_read_file(const char *path, char **data);
 #define INTEGRITY_KEYRING_EVM		0
 #define INTEGRITY_KEYRING_IMA		1
 #define INTEGRITY_KEYRING_MODULE	2
+#ifndef INTEGRITY_KEYRING_MAX
 #define INTEGRITY_KEYRING_MAX		3
+#endif
 
 #ifdef CONFIG_INTEGRITY_SIGNATURE
 

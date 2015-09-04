@@ -19,9 +19,11 @@
 
 /* Moved from ima.h to ima_namespace.h */
 #ifndef IMA_HASH_BITS
-#define IMA_HASH_BITS 9
+#define IMA_HASH_BITS	9
 #endif
 #define IMA_MEASURE_HTABLE_SIZE (1 << IMA_HASH_BITS)
+#define IMA_KEYRING_NAME_SIZE	14	/* _ima_xxxxxxxx */
+#define INTEGRITY_KEYRING_MAX	3
 
 enum ima_fs_flags {
 	IMA_FS_BUSY,
@@ -52,6 +54,8 @@ struct ima_namespace {
 	/* for policy quick check */
 	int ima_policy_flag;
 	struct list_head iint_list;
+	unsigned char ima_keyring[IMA_KEYRING_NAME_SIZE];
+	struct key *keyring[INTEGRITY_KEYRING_MAX];
 	struct ima_h_table ima_htable;
 };
 
