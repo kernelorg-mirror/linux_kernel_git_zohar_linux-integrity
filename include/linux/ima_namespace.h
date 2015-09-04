@@ -17,8 +17,21 @@
 #include <linux/sched.h>
 #include <linux/fs.h>
 
+/* Moved from ima.h to ima_namespace.h */
+#ifndef IMA_HASH_BITS
+#define IMA_HASH_BITS 9
+#endif
+#define IMA_MEASURE_HTABLE_SIZE (1 << IMA_HASH_BITS)
+
 enum ima_fs_flags {
 	IMA_FS_BUSY,
+};
+
+struct ima_h_table {
+	/* Number of stored measurements in the list */
+	atomic_long_t len;
+	atomic_long_t violations;
+	struct hlist_head queue[IMA_MEASURE_HTABLE_SIZE];
 };
 
 struct ima_namespace {
@@ -39,6 +52,7 @@ struct ima_namespace {
 	/* for policy quick check */
 	int ima_policy_flag;
 	struct list_head iint_list;
+	struct ima_h_table ima_htable;
 };
 
 extern struct ima_namespace init_ima_ns;

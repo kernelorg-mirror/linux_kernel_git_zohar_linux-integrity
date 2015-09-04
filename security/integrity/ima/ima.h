@@ -4,6 +4,7 @@
  * Authors:
  * Reiner Sailer <sailer@watson.ibm.com>
  * Mimi Zohar <zohar@us.ibm.com>
+ * Yuqiong Sun <suny@us.ibm.com>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -110,7 +111,6 @@ struct ima_queue_entry {
 	struct list_head later;		/* place in ima_measurements list */
 	struct ima_template_entry *entry;
 };
-extern struct list_head ima_measurements;	/* list of all measurements */
 
 /* Some details preceding the binary serialized measurement list */
 struct ima_kexec_hdr {
@@ -163,19 +163,13 @@ int ima_init_template(void);
 int ima_ns_status_init(void);
 struct ns_status *ima_get_ns_status(struct ima_namespace *ns,
 				    struct integrity_iint_cache *iint);
+void ima_free_ns_status(struct ima_namespace *ns);
 void ima_init_template_list(void);
 
 /*
  * used to protect h_table and sha_table
  */
 extern spinlock_t ima_queue_lock;
-
-struct ima_h_table {
-	atomic_long_t len;	/* number of stored measurements in the list */
-	atomic_long_t violations;
-	struct hlist_head queue[IMA_MEASURE_HTABLE_SIZE];
-};
-extern struct ima_h_table ima_htable;
 
 static inline unsigned long ima_hash_key(u8 *digest)
 {
@@ -274,7 +268,8 @@ static inline int ima_appraise_measurement(enum ima_hooks func,
 }
 
 static inline int ima_must_appraise(struct inode *inode, int mask,
-				    enum ima_hooks func)
+				    enum ima_hooks func,
+				    struct user_namespace *user_ns)
 {
 	return 0;
 }

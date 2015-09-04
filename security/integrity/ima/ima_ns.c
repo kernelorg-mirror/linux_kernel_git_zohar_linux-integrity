@@ -34,6 +34,11 @@ struct ima_namespace init_ima_ns = {
 	.ima_fs_flags = 0,
 	.ima_policy_flag = 0,
 	.iint_list = LIST_HEAD_INIT(init_ima_ns.iint_list),
+	.ima_htable = {
+		.len = ATOMIC_LONG_INIT(0),
+		.violations = ATOMIC_LONG_INIT(0),
+		.queue[0 ... IMA_MEASURE_HTABLE_SIZE - 1] = HLIST_HEAD_INIT,
+	},
 };
 EXPORT_SYMBOL(init_ima_ns);
 

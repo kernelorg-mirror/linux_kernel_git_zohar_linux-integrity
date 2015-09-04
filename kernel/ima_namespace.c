@@ -38,7 +38,7 @@ static struct ima_namespace *clone_ima_ns(struct user_namespace *user_ns,
 					  struct ima_namespace *old_ns)
 {
 	struct ima_namespace *ns;
-	int err;
+	int err, i;
 
 	ns = create_ima_ns();
 	if (!ns)
@@ -55,6 +55,19 @@ static struct ima_namespace *clone_ima_ns(struct user_namespace *user_ns,
 	ns->parent = old_ns;
 	ns->user_ns = get_user_ns(user_ns);
 	INIT_LIST_HEAD(&ns->ima_measurements);
+	INIT_LIST_HEAD(&ns->ima_policy_rules);
+	INIT_LIST_HEAD(&ns->ima_temp_rules);
+	ns->ima_rules = &ima_default_rules,
+	ns->nr_extents = 0;
+	ns->ima_fs_flags = 0;
+	INIT_LIST_HEAD(&ns->iint_list);
+	atomic_long_set(&ns->ima_htable.len, 0);
+	atomic_long_set(&ns->ima_htable.violations, 0);
+
+	for (i = 0; i < IMA_MEASURE_HTABLE_SIZE; i++)
+		INIT_HLIST_HEAD(&ns->ima_htable.queue[i]);
+
+	ima_update_policy_flag(ns);
 
 	return ns;
 }
@@ -92,7 +105,9 @@ static void destroy_ima_ns(struct ima_namespace *ns)
 {
 	put_user_ns(ns->user_ns);
 	ns_free_inum(&ns->ns);
+	ima_delete_rules(&ns->ima_policy_rules);
 	ima_free_queue_entries(ns);
+	ima_free_ns_status(ns);
 	kfree(ns);
 }
 
