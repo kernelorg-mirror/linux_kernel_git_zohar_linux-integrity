@@ -154,7 +154,7 @@ void ima_file_free(struct file *file)
 }
 
 static int process_measurement(struct file *file, int mask, int function,
-			       int opened)
+			       struct ima_digest_data *hash, int opened)
 {
 	struct inode *inode = file_inode(file);
 	struct integrity_iint_cache *iint = NULL;
@@ -191,6 +191,11 @@ static int process_measurement(struct file *file, int mask, int function,
 	if (action) {
 		iint = integrity_inode_get(inode);
 		if (!iint)
+			goto out;
+	}
+	if (hash) {
+		rc = ima_collected_measurement(iint, file, hash);
+		if (rc)
 			goto out;
 	}
 
@@ -273,7 +278,7 @@ out:
 int ima_file_mmap(struct file *file, unsigned long prot)
 {
 	if (file && (prot & PROT_EXEC))
-		return process_measurement(file, MAY_EXEC, MMAP_CHECK, 0);
+		return process_measurement(file, MAY_EXEC, MMAP_CHECK, NULL, 0);
 	return 0;
 }
 
@@ -292,7 +297,7 @@ int ima_file_mmap(struct file *file, unsigned long prot)
  */
 int ima_bprm_check(struct linux_binprm *bprm)
 {
-	return process_measurement(bprm->file, MAY_EXEC, BPRM_CHECK, 0);
+	return process_measurement(bprm->file, MAY_EXEC, BPRM_CHECK, NULL, 0);
 }
 
 /**
@@ -309,7 +314,7 @@ int ima_file_check(struct file *file, int mask, int opened)
 {
 	return process_measurement(file,
 				   mask & (MAY_READ | MAY_WRITE | MAY_EXEC),
-				   FILE_CHECK, opened);
+				   FILE_CHECK, NULL, opened);
 }
 EXPORT_SYMBOL_GPL(ima_file_check);
 
@@ -332,7 +337,31 @@ int ima_module_check(struct file *file)
 #endif
 		return 0;	/* We rely on module signature checking */
 	}
-	return process_measurement(file, MAY_EXEC, MODULE_CHECK, 0);
+	return process_measurement(file, MAY_EXEC, MODULE_CHECK, NULL, 0);
+}
+
+static int ima_read_and_process_file(struct file *file, enum ima_hooks func,
+				     void **buf, size_t *buf_len)
+{
+	struct evm_ima_xattr_data *xattr_value = NULL;
+	struct ima_template_desc *template_desc = ima_template_desc_current();
+	int xattr_len = 0;
+	struct {
+		struct ima_digest_data hdr;
+		char digest[IMA_MAX_DIGEST_SIZE];
+	} hash;
+	int ret;
+
+	template_desc = ima_template_desc_current();
+	if (strcmp(template_desc->name, IMA_TEMPLATE_IMA_NAME) != 0)
+		xattr_len = ima_read_xattr(file->f_path.dentry, &xattr_value);
+
+	hash.hdr.algo = ima_get_hash_algo(xattr_value, xattr_len);
+	ret = ima_calc_file_hash(file, &hash.hdr, buf, buf_len);
+	if (!ret)
+		ret = process_measurement(file, MAY_READ, func, &hash.hdr, 0);
+	kfree(xattr_value);
+	return ret;
 }
 
 int ima_fw_from_file(struct file *file, char *buf, size_t size)
@@ -343,7 +372,20 @@ int ima_fw_from_file(struct file *file, char *buf, size_t size)
 			return -EACCES;	/* INTEGRITY_UNKNOWN */
 		return 0;
 	}
-	return process_measurement(file, MAY_EXEC, FIRMWARE_CHECK, 0);
+	return process_measurement(file, MAY_EXEC, FIRMWARE_CHECK, NULL, 0);
+}
+
+int ima_read_file_from_fd(int fd, void **buf, size_t *buf_len)
+{
+	struct fd f = fdget(fd);
+	int ret;
+
+	if (!f.file)
+		return -EBADF;
+
+	ret = ima_read_and_process_file(f.file, KEXEC_CHECK, buf, buf_len);
+	fdput(f);
+	return ret;
 }
 
 static int __init init_ima(void)

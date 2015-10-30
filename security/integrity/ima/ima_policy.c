@@ -304,6 +304,8 @@ static int get_subaction(struct ima_rule_entry *rule, int func)
 		return IMA_MODULE_APPRAISE;
 	case FIRMWARE_CHECK:
 		return IMA_FIRMWARE_APPRAISE;
+	case KEXEC_CHECK:
+		return IMA_KEXEC_APPRAISE;
 	case FILE_CHECK:
 	default:
 		return IMA_FILE_APPRAISE;
@@ -579,6 +581,8 @@ static int ima_parse_rule(char *rule, struct ima_rule_entry *entry)
 				entry->func = MMAP_CHECK;
 			else if (strcmp(args[0].from, "BPRM_CHECK") == 0)
 				entry->func = BPRM_CHECK;
+			else if (strcmp(args[0].from, "KEXEC_CHECK") == 0)
+				entry->func = KEXEC_CHECK;
 			else
 				result = -EINVAL;
 			if (!result)

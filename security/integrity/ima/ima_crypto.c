@@ -23,6 +23,7 @@
 #include <linux/scatterlist.h>
 #include <linux/err.h>
 #include <linux/slab.h>
+#include <linux/vmalloc.h>
 #include <crypto/hash.h>
 
 #include "ima.h"
@@ -352,6 +353,7 @@ static int ima_calc_file_ahash(struct file *file, struct ima_digest_data *hash)
 
 static int ima_calc_file_hash_tfm(struct file *file,
 				  struct ima_digest_data *hash,
+				  void **buf, unsigned long *buf_len,
 				  struct crypto_shash *tfm)
 {
 	loff_t i_size, offset = 0;
@@ -373,7 +375,7 @@ static int ima_calc_file_hash_tfm(struct file *file,
 	if (i_size == 0)
 		goto out;
 
-	rbuf = kzalloc(PAGE_SIZE, GFP_KERNEL);
+	rbuf = !buf ? kzalloc(PAGE_SIZE, GFP_KERNEL) : vmalloc(i_size);
 	if (!rbuf)
 		return -ENOMEM;
 
@@ -385,29 +387,45 @@ static int ima_calc_file_hash_tfm(struct file *file,
 	while (offset < i_size) {
 		int rbuf_len;
 
-		rbuf_len = integrity_kernel_read(file, offset, rbuf, PAGE_SIZE);
+		rbuf_len = integrity_kernel_read(file, offset,
+						 !buf ? rbuf : rbuf + offset,
+						 PAGE_SIZE);
 		if (rbuf_len < 0) {
 			rc = rbuf_len;
 			break;
 		}
 		if (rbuf_len == 0)
 			break;
-		offset += rbuf_len;
 
-		rc = crypto_shash_update(shash, rbuf, rbuf_len);
+		rc = crypto_shash_update(shash, !buf ? rbuf : rbuf + offset,
+					 rbuf_len);
+		offset += rbuf_len;
 		if (rc)
 			break;
 	}
 	if (read)
 		file->f_mode &= ~FMODE_READ;
-	kfree(rbuf);
+	
+	if (!buf)
+		kfree(rbuf);
+	else {
+		*buf = rbuf;
+		*buf_len = i_size;
+	}
+
 out:
 	if (!rc)
 		rc = crypto_shash_final(shash, hash->digest);
 	return rc;
 }
 
-static int ima_calc_file_shash(struct file *file, struct ima_digest_data *hash)
+/*
+ * ima_calc_file_shash calculates a file hash.  When the caller specfies
+ * a buffer, read the file data into memory, calculating the file hash,
+ * and return the buffer.
+ */
+static int ima_calc_file_shash(struct file *file, struct ima_digest_data *hash,
+			       void **buf, unsigned long *buf_len)
 {
 	struct crypto_shash *tfm;
 	int rc;
@@ -416,7 +434,7 @@ static int ima_calc_file_shash(struct file *file, struct ima_digest_data *hash)
 	if (IS_ERR(tfm))
 		return PTR_ERR(tfm);
 
-	rc = ima_calc_file_hash_tfm(file, hash, tfm);
+	rc = ima_calc_file_hash_tfm(file, hash, buf, buf_len, tfm);
 
 	ima_free_tfm(tfm);
 
@@ -435,21 +453,25 @@ static int ima_calc_file_shash(struct file *file, struct ima_digest_data *hash)
  * If the ima.ahash_minsize parameter is not specified, this function uses
  * shash for the hash calculation.  If ahash fails, it falls back to using
  * shash.
+ * 
+ * When returning the file data to the caller, use shash to calculate the
+ * file hash.
  */
-int ima_calc_file_hash(struct file *file, struct ima_digest_data *hash)
+int ima_calc_file_hash(struct file *file, struct ima_digest_data *hash,
+		       void **buf, unsigned long *buf_len)
 {
 	loff_t i_size;
 	int rc;
 
 	i_size = i_size_read(file_inode(file));
 
-	if (ima_ahash_minsize && i_size >= ima_ahash_minsize) {
+	if (ima_ahash_minsize && i_size >= ima_ahash_minsize && !buf) {
 		rc = ima_calc_file_ahash(file, hash);
 		if (!rc)
 			return 0;
 	}
 
-	return ima_calc_file_shash(file, hash);
+	return ima_calc_file_shash(file, hash, buf, buf_len);
 }
 
 /*

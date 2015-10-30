@@ -210,7 +210,7 @@ int ima_collect_measurement(struct integrity_iint_cache *iint,
 
 		hash.hdr.algo = algo;
 
-		result = ima_calc_file_hash(file, &hash.hdr);
+		result = ima_calc_file_hash(file, &hash.hdr, NULL, NULL);
 		if (!result) {
 			int length = sizeof(hash.hdr) + hash.hdr.length;
 			void *tmpbuf = krealloc(iint->ima_hash, length,
@@ -228,6 +228,39 @@ out:
 	if (result)
 		integrity_audit_msg(AUDIT_INTEGRITY_DATA, inode,
 				    filename, "collect_data", audit_cause,
+				    result, 0);
+	return result;
+}
+
+/*
+ * ima_collected_measurement - save the "collected" file hash
+ *
+ * The file hash has already been "collected".  Save the file hash
+ * in the iint and clear the measured/appraised flags.
+ */
+int ima_collected_measurement(struct integrity_iint_cache *iint,
+			      struct file *file, struct ima_digest_data *hash)
+{
+	const char *audit_cause = "failed";
+	const char *filename = file->f_path.dentry->d_name.name;
+	int length = sizeof(struct ima_digest_data) + hash->length;
+	int result = -ENOMEM;
+	void *tmpbuf = krealloc(iint->ima_hash, length, GFP_KERNEL);
+
+	if (!tmpbuf)
+		goto out;
+
+	iint->ima_hash = tmpbuf;
+	memcpy(iint->ima_hash, hash, length);
+	iint->version = file_inode(file)->i_version;
+	iint->flags |= IMA_COLLECTED;
+	result = 0;
+
+out:
+	if (result)
+		integrity_audit_msg(AUDIT_INTEGRITY_DATA,
+				    d_inode(file->f_path.dentry),
+				    filename, "collected_data", audit_cause,
 				    result, 0);
 	return result;
 }
