@@ -53,7 +53,10 @@ struct ima_rule_entry {
 	struct list_head list;
 	int action;
 	unsigned int flags;
-	enum ima_hooks func;
+	union {
+		enum ima_hooks func;
+		enum ima_read_hooks read_func;
+	};
 	int mask;
 	unsigned long fsmagic;
 	u8 fsuuid[16];
@@ -303,6 +306,9 @@ static int get_subaction(struct ima_rule_entry *rule, int func)
 		return IMA_MODULE_APPRAISE;
 	case FIRMWARE_CHECK:
 		return IMA_FIRMWARE_APPRAISE;
+	case KEXEC_CHECK:
+	case INITRAMFS_CHECK:
+		return IMA_READ_APPRAISE;
 	case FILE_CHECK:
 	default:
 		return IMA_FILE_APPRAISE;
@@ -604,6 +610,10 @@ static int ima_parse_rule(char *rule, struct ima_rule_entry *entry)
 				entry->func = MMAP_CHECK;
 			else if (strcmp(args[0].from, "BPRM_CHECK") == 0)
 				entry->func = BPRM_CHECK;
+			else if (strcmp(args[0].from, "KEXEC_CHECK") == 0)
+				entry->read_func = KEXEC_CHECK;
+			else if (strcmp(args[0].from, "INITRAMFS_CHECK") == 0)
+				entry->read_func = INITRAMFS_CHECK;
 			else
 				result = -EINVAL;
 			if (!result)
@@ -847,7 +857,8 @@ static char *mask_tokens[] = {
 
 enum {
 	func_file = 0, func_mmap, func_bprm,
-	func_module, func_firmware, func_post
+	func_module, func_firmware, func_post,
+	func_kexec, func_initramfs
 };
 
 static char *func_tokens[] = {
@@ -856,7 +867,9 @@ static char *func_tokens[] = {
 	"BPRM_CHECK",
 	"MODULE_CHECK",
 	"FIRMWARE_CHECK",
-	"POST_SETATTR"
+	"POST_SETATTR",
+	"KEXEC_CHECK",
+	"INITRAMFS_CHECK",
 };
 
 void *ima_policy_start(struct seq_file *m, loff_t *pos)
@@ -937,9 +950,18 @@ int ima_policy_show(struct seq_file *m, void *v)
 			seq_printf(m, pt(Opt_func), ft(func_post));
 			break;
 		default:
-			snprintf(tbuf, sizeof(tbuf), "%d", entry->func);
-			seq_printf(m, pt(Opt_func), tbuf);
-			break;
+			switch (entry->read_func) {
+			case KEXEC_CHECK:
+				seq_printf(m, pt(Opt_func), ft(func_kexec));
+				break;
+			case INITRAMFS_CHECK:
+				seq_printf(m, pt(Opt_func), ft(func_initramfs));
+				break;
+			default:
+				snprintf(tbuf, sizeof(tbuf), "%d", entry->func);
+				seq_printf(m, pt(Opt_func), tbuf);
+				break;
+			}
 		}
 		seq_puts(m, " ");
 	}

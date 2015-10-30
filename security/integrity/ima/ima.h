@@ -20,6 +20,7 @@
 #include <linux/types.h>
 #include <linux/crypto.h>
 #include <linux/security.h>
+#include <linux/ima.h>
 #include <linux/hash.h>
 #include <linux/tpm.h>
 #include <linux/audit.h>
@@ -106,7 +107,8 @@ int ima_fs_init(void);
 int ima_add_template_entry(struct ima_template_entry *entry, int violation,
 			   const char *op, struct inode *inode,
 			   const unsigned char *filename);
-int ima_calc_file_hash(struct file *file, struct ima_digest_data *hash);
+int ima_calc_file_hash(struct file *file, struct ima_digest_data *hash,
+		       void *buf, unsigned long buf_len);
 int ima_calc_field_array_hash(struct ima_field_data *field_data,
 			      struct ima_template_desc *desc, int num_fields,
 			      struct ima_digest_data *hash);
@@ -142,6 +144,8 @@ int ima_get_action(struct inode *inode, int mask, int function);
 int ima_must_measure(struct inode *inode, int mask, int function);
 int ima_collect_measurement(struct integrity_iint_cache *iint,
 			    struct file *file, enum hash_algo algo);
+int ima_collected_measurement(struct integrity_iint_cache *iint,
+			    struct file *file, struct ima_digest_data *hash);
 void ima_store_measurement(struct integrity_iint_cache *iint, struct file *file,
 			   const unsigned char *filename,
 			   struct evm_ima_xattr_data *xattr_value,
@@ -156,7 +160,13 @@ void ima_free_template_entry(struct ima_template_entry *entry);
 const char *ima_d_path(struct path *path, char **pathbuf);
 
 /* IMA policy related functions */
-enum ima_hooks { FILE_CHECK = 1, MMAP_CHECK, BPRM_CHECK, MODULE_CHECK, FIRMWARE_CHECK, POST_SETATTR };
+enum ima_hooks {
+	FILE_CHECK = IMA_MAX_READ_CHECK,
+	MMAP_CHECK,
+	BPRM_CHECK,
+	MODULE_CHECK,
+	FIRMWARE_CHECK,
+	POST_SETATTR};
 
 int ima_match_policy(struct inode *inode, enum ima_hooks func, int mask,
 		     int flags);

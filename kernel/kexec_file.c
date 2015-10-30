@@ -18,6 +18,7 @@
 #include <linux/kexec.h>
 #include <linux/mutex.h>
 #include <linux/list.h>
+#include <linux/ima.h>
 #include <crypto/hash.h>
 #include <crypto/sha.h>
 #include <linux/syscalls.h>
@@ -33,7 +34,8 @@ size_t __weak kexec_purgatory_size = 0;
 
 static int kexec_calculate_store_digests(struct kimage *image);
 
-static int copy_file_from_fd(int fd, void **buf, unsigned long *buf_len)
+static int copy_file_from_fd(int fd, enum ima_read_hooks read_func,
+			     void **buf, unsigned long *buf_len)
 {
 	struct fd f = fdget(fd);
 	int ret;
@@ -65,14 +67,17 @@ static int copy_file_from_fd(int fd, void **buf, unsigned long *buf_len)
 		goto out;
 	}
 
+	ret = ima_read_and_process_file(f.file, read_func, *buf, stat.size);
+	if (ret != -EOPNOTSUPP)
+		goto out_free;
+
 	pos = 0;
 	while (pos < stat.size) {
 		bytes = kernel_read(f.file, pos, (char *)(*buf) + pos,
 				    stat.size - pos);
 		if (bytes < 0) {
-			vfree(*buf);
 			ret = bytes;
-			goto out;
+			goto out_free;
 		}
 
 		if (bytes == 0)
@@ -80,13 +85,13 @@ static int copy_file_from_fd(int fd, void **buf, unsigned long *buf_len)
 		pos += bytes;
 	}
 
-	if (pos != stat.size) {
+	if (pos != stat.size)
 		ret = -EBADF;
+	else
+		*buf_len = pos;
+out_free:
+	if (ret < 0)
 		vfree(*buf);
-		goto out;
-	}
-
-	*buf_len = pos;
 out:
 	fdput(f);
 	return ret;
@@ -181,8 +186,8 @@ kimage_file_prepare_segments(struct kimage *image, int kernel_fd, int initrd_fd,
 	int ret = 0;
 	void *ldata;
 
-	ret = copy_file_from_fd(kernel_fd, &image->kernel_buf,
-				&image->kernel_buf_len);
+	ret = copy_file_from_fd(kernel_fd, KEXEC_CHECK,
+				&image->kernel_buf, &image->kernel_buf_len);
 	if (ret)
 		return ret;
 
@@ -204,7 +209,8 @@ kimage_file_prepare_segments(struct kimage *image, int kernel_fd, int initrd_fd,
 #endif
 	/* It is possible that there no initramfs is being loaded */
 	if (!(flags & KEXEC_FILE_NO_INITRAMFS)) {
-		ret = copy_file_from_fd(initrd_fd, &image->initrd_buf,
+		ret = copy_file_from_fd(initrd_fd, INITRAMFS_CHECK,
+					&image->initrd_buf,
 					&image->initrd_buf_len);
 		if (ret)
 			goto out;
