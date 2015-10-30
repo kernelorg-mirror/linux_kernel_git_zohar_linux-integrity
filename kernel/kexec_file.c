@@ -18,6 +18,7 @@
 #include <linux/kexec.h>
 #include <linux/mutex.h>
 #include <linux/list.h>
+#include <linux/ima.h>
 #include <crypto/hash.h>
 #include <crypto/sha.h>
 #include <linux/syscalls.h>
@@ -33,7 +34,8 @@ size_t __weak kexec_purgatory_size = 0;
 
 static int kexec_calculate_store_digests(struct kimage *image);
 
-static int copy_file_from_fd(int fd, void **buf, unsigned long *buf_len)
+static int copy_file_from_fd(int fd, void **buf, unsigned long *buf_len,
+			     enum ima_policy_id policy_id)
 {
 	struct fd f = fdget(fd);
 	int ret;
@@ -70,9 +72,8 @@ static int copy_file_from_fd(int fd, void **buf, unsigned long *buf_len)
 		bytes = kernel_read(f.file, pos, (char *)(*buf) + pos,
 				    stat.size - pos);
 		if (bytes < 0) {
-			vfree(*buf);
 			ret = bytes;
-			goto out;
+			goto out_free;
 		}
 
 		if (bytes == 0)
@@ -80,13 +81,17 @@ static int copy_file_from_fd(int fd, void **buf, unsigned long *buf_len)
 		pos += bytes;
 	}
 
-	if (pos != stat.size) {
+	if (pos != stat.size)
 		ret = -EBADF;
-		vfree(*buf);
-		goto out;
-	}
 
-	*buf_len = pos;
+	ret = ima_hash_and_process_file(f.file, *buf, stat.size, policy_id);
+	if (!ret)
+		*buf_len = pos;
+out_free:
+	if (ret < 0) {
+		vfree(*buf);
+		*buf = NULL;
+	}
 out:
 	fdput(f);
 	return ret;
@@ -182,7 +187,7 @@ kimage_file_prepare_segments(struct kimage *image, int kernel_fd, int initrd_fd,
 	void *ldata;
 
 	ret = copy_file_from_fd(kernel_fd, &image->kernel_buf,
-				&image->kernel_buf_len);
+				&image->kernel_buf_len, KEXEC_CHECK);
 	if (ret)
 		return ret;
 
@@ -205,7 +210,8 @@ kimage_file_prepare_segments(struct kimage *image, int kernel_fd, int initrd_fd,
 	/* It is possible that there no initramfs is being loaded */
 	if (!(flags & KEXEC_FILE_NO_INITRAMFS)) {
 		ret = copy_file_from_fd(initrd_fd, &image->initrd_buf,
-					&image->initrd_buf_len);
+					&image->initrd_buf_len,
+					INITRAMFS_CHECK);
 		if (ret)
 			goto out;
 	}

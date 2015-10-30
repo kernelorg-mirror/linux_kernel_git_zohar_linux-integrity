@@ -53,7 +53,10 @@ struct ima_rule_entry {
 	struct list_head list;
 	int action;
 	unsigned int flags;
-	enum ima_hooks func;
+	union {
+		enum ima_hooks func;
+		enum ima_policy_id policy_id;
+	} hooks;
 	int mask;
 	unsigned long fsmagic;
 	u8 fsuuid[16];
@@ -92,27 +95,27 @@ static struct ima_rule_entry dont_measure_rules[] = {
 };
 
 static struct ima_rule_entry original_measurement_rules[] = {
-	{.action = MEASURE, .func = MMAP_CHECK, .mask = MAY_EXEC,
+	{.action = MEASURE, .hooks.func = MMAP_CHECK, .mask = MAY_EXEC,
 	 .flags = IMA_FUNC | IMA_MASK},
-	{.action = MEASURE, .func = BPRM_CHECK, .mask = MAY_EXEC,
+	{.action = MEASURE, .hooks.func = BPRM_CHECK, .mask = MAY_EXEC,
 	 .flags = IMA_FUNC | IMA_MASK},
-	{.action = MEASURE, .func = FILE_CHECK, .mask = MAY_READ,
+	{.action = MEASURE, .hooks.func = FILE_CHECK, .mask = MAY_READ,
 	 .uid = GLOBAL_ROOT_UID, .flags = IMA_FUNC | IMA_MASK | IMA_UID},
-	{.action = MEASURE, .func = MODULE_CHECK, .flags = IMA_FUNC},
-	{.action = MEASURE, .func = FIRMWARE_CHECK, .flags = IMA_FUNC},
+	{.action = MEASURE, .hooks.func = MODULE_CHECK, .flags = IMA_FUNC},
+	{.action = MEASURE, .hooks.func = FIRMWARE_CHECK, .flags = IMA_FUNC},
 };
 
 static struct ima_rule_entry default_measurement_rules[] = {
-	{.action = MEASURE, .func = MMAP_CHECK, .mask = MAY_EXEC,
+	{.action = MEASURE, .hooks.func = MMAP_CHECK, .mask = MAY_EXEC,
 	 .flags = IMA_FUNC | IMA_MASK},
-	{.action = MEASURE, .func = BPRM_CHECK, .mask = MAY_EXEC,
+	{.action = MEASURE, .hooks.func = BPRM_CHECK, .mask = MAY_EXEC,
 	 .flags = IMA_FUNC | IMA_MASK},
-	{.action = MEASURE, .func = FILE_CHECK, .mask = MAY_READ,
+	{.action = MEASURE, .hooks.func = FILE_CHECK, .mask = MAY_READ,
 	 .uid = GLOBAL_ROOT_UID, .flags = IMA_FUNC | IMA_INMASK | IMA_EUID},
-	{.action = MEASURE, .func = FILE_CHECK, .mask = MAY_READ,
+	{.action = MEASURE, .hooks.func = FILE_CHECK, .mask = MAY_READ,
 	 .uid = GLOBAL_ROOT_UID, .flags = IMA_FUNC | IMA_INMASK | IMA_UID},
-	{.action = MEASURE, .func = MODULE_CHECK, .flags = IMA_FUNC},
-	{.action = MEASURE, .func = FIRMWARE_CHECK, .flags = IMA_FUNC},
+	{.action = MEASURE, .hooks.func = MODULE_CHECK, .flags = IMA_FUNC},
+	{.action = MEASURE, .hooks.func = FIRMWARE_CHECK, .flags = IMA_FUNC},
 };
 
 static struct ima_rule_entry default_appraise_rules[] = {
@@ -208,14 +211,14 @@ static void ima_lsm_update_rules(void)
  * Returns true on rule match, false on failure.
  */
 static bool ima_match_rules(struct ima_rule_entry *rule,
-			    struct inode *inode, enum ima_hooks func, int mask)
+			    struct inode *inode, int func, int mask)
 {
 	struct task_struct *tsk = current;
 	const struct cred *cred = current_cred();
 	int i;
 
 	if ((rule->flags & IMA_FUNC) &&
-	    (rule->func != func && func != POST_SETATTR))
+	    (rule->hooks.func != func && func != POST_SETATTR))
 		return false;
 	if ((rule->flags & IMA_MASK) &&
 	    (rule->mask != mask && func != POST_SETATTR))
@@ -303,6 +306,8 @@ static int get_subaction(struct ima_rule_entry *rule, int func)
 		return IMA_MODULE_APPRAISE;
 	case FIRMWARE_CHECK:
 		return IMA_FIRMWARE_APPRAISE;
+	case KEXEC_CHECK ... IMA_MAX_READ_CHECK - 1:
+		return IMA_READ_APPRAISE;
 	case FILE_CHECK:
 	default:
 		return IMA_FILE_APPRAISE;
@@ -322,8 +327,7 @@ static int get_subaction(struct ima_rule_entry *rule, int func)
  * list when walking it.  Reads are many orders of magnitude more numerous
  * than writes so ima_match_policy() is classical RCU candidate.
  */
-int ima_match_policy(struct inode *inode, enum ima_hooks func, int mask,
-		     int flags)
+int ima_match_policy(struct inode *inode, int func, int mask, int flags)
 {
 	struct ima_rule_entry *entry;
 	int action = 0, actmask = flags | (flags << 1);
@@ -595,23 +599,27 @@ static int ima_parse_rule(char *rule, struct ima_rule_entry *entry)
 		case Opt_func:
 			ima_log_string(ab, "func", args[0].from);
 
-			if (entry->func)
+			if (entry->hooks.func)
 				result = -EINVAL;
 
 			if (strcmp(args[0].from, "FILE_CHECK") == 0)
-				entry->func = FILE_CHECK;
+				entry->hooks.func = FILE_CHECK;
 			/* PATH_CHECK is for backwards compat */
 			else if (strcmp(args[0].from, "PATH_CHECK") == 0)
-				entry->func = FILE_CHECK;
+				entry->hooks.func = FILE_CHECK;
 			else if (strcmp(args[0].from, "MODULE_CHECK") == 0)
-				entry->func = MODULE_CHECK;
+				entry->hooks.func = MODULE_CHECK;
 			else if (strcmp(args[0].from, "FIRMWARE_CHECK") == 0)
-				entry->func = FIRMWARE_CHECK;
+				entry->hooks.func = FIRMWARE_CHECK;
 			else if ((strcmp(args[0].from, "FILE_MMAP") == 0)
 				|| (strcmp(args[0].from, "MMAP_CHECK") == 0))
-				entry->func = MMAP_CHECK;
+				entry->hooks.func = MMAP_CHECK;
 			else if (strcmp(args[0].from, "BPRM_CHECK") == 0)
-				entry->func = BPRM_CHECK;
+				entry->hooks.func = BPRM_CHECK;
+			else if (strcmp(args[0].from, "KEXEC_CHECK") == 0)
+				entry->hooks.policy_id = KEXEC_CHECK;
+			else if (strcmp(args[0].from, "INITRAMFS_CHECK") == 0)
+				entry->hooks.policy_id = INITRAMFS_CHECK;
 			else
 				result = -EINVAL;
 			if (!result)
@@ -766,9 +774,9 @@ static int ima_parse_rule(char *rule, struct ima_rule_entry *entry)
 	}
 	if (!result && (entry->action == UNKNOWN))
 		result = -EINVAL;
-	else if (entry->func == MODULE_CHECK)
+	else if (entry->hooks.func == MODULE_CHECK)
 		temp_ima_appraise |= IMA_APPRAISE_MODULES;
-	else if (entry->func == FIRMWARE_CHECK)
+	else if (entry->hooks.func == FIRMWARE_CHECK)
 		temp_ima_appraise |= IMA_APPRAISE_FIRMWARE;
 	audit_log_format(ab, "res=%d", !result);
 	audit_log_end(ab);
@@ -855,7 +863,8 @@ static char *mask_tokens[] = {
 
 enum {
 	func_file = 0, func_mmap, func_bprm,
-	func_module, func_firmware, func_post
+	func_module, func_firmware, func_post,
+	func_kexec, func_initramfs
 };
 
 static char *func_tokens[] = {
@@ -864,7 +873,9 @@ static char *func_tokens[] = {
 	"BPRM_CHECK",
 	"MODULE_CHECK",
 	"FIRMWARE_CHECK",
-	"POST_SETATTR"
+	"POST_SETATTR",
+	"KEXEC_CHECK",
+	"INITRAMFS_CHECK",
 };
 
 void *ima_policy_start(struct seq_file *m, loff_t *pos)
@@ -925,7 +936,7 @@ int ima_policy_show(struct seq_file *m, void *v)
 	seq_puts(m, " ");
 
 	if (entry->flags & IMA_FUNC) {
-		switch (entry->func) {
+		switch (entry->hooks.func) {
 		case FILE_CHECK:
 			seq_printf(m, pt(Opt_func), ft(func_file));
 			break;
@@ -945,9 +956,19 @@ int ima_policy_show(struct seq_file *m, void *v)
 			seq_printf(m, pt(Opt_func), ft(func_post));
 			break;
 		default:
-			snprintf(tbuf, sizeof(tbuf), "%d", entry->func);
-			seq_printf(m, pt(Opt_func), tbuf);
-			break;
+			switch (entry->hooks.policy_id) {
+			case KEXEC_CHECK:
+				seq_printf(m, pt(Opt_func), ft(func_kexec));
+				break;
+			case INITRAMFS_CHECK:
+				seq_printf(m, pt(Opt_func), ft(func_initramfs));
+				break;
+			default:
+				snprintf(tbuf, sizeof(tbuf), "%d",
+					 entry->hooks.func);
+				seq_printf(m, pt(Opt_func), tbuf);
+				break;
+			}
 		}
 		seq_puts(m, " ");
 	}

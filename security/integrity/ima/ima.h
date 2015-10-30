@@ -20,6 +20,7 @@
 #include <linux/types.h>
 #include <linux/crypto.h>
 #include <linux/security.h>
+#include <linux/ima.h>
 #include <linux/hash.h>
 #include <linux/tpm.h>
 #include <linux/audit.h>
@@ -143,7 +144,8 @@ static inline unsigned long ima_hash_key(u8 *digest)
 int ima_get_action(struct inode *inode, int mask, int function);
 int ima_must_measure(struct inode *inode, int mask, int function);
 int ima_collect_measurement(struct integrity_iint_cache *iint,
-			    struct file *file, enum hash_algo algo);
+			    struct file *file, void *buf, loff_t size,
+			    enum hash_algo algo);
 void ima_store_measurement(struct integrity_iint_cache *iint, struct file *file,
 			   const unsigned char *filename,
 			   struct evm_ima_xattr_data *xattr_value,
@@ -158,10 +160,16 @@ void ima_free_template_entry(struct ima_template_entry *entry);
 const char *ima_d_path(struct path *path, char **pathbuf);
 
 /* IMA policy related functions */
-enum ima_hooks { FILE_CHECK = 1, MMAP_CHECK, BPRM_CHECK, MODULE_CHECK, FIRMWARE_CHECK, POST_SETATTR };
+enum ima_hooks {
+	FILE_CHECK = IMA_MAX_READ_CHECK,
+	MMAP_CHECK,
+	BPRM_CHECK,
+	MODULE_CHECK,
+	FIRMWARE_CHECK,
+	POST_SETATTR
+};
 
-int ima_match_policy(struct inode *inode, enum ima_hooks func, int mask,
-		     int flags);
+int ima_match_policy(struct inode *inode, int func, int mask, int flags);
 void ima_init_policy(void);
 void ima_update_policy(void);
 void ima_update_policy_flag(void);
@@ -185,7 +193,7 @@ int ima_appraise_measurement(int func, struct integrity_iint_cache *iint,
 			     struct file *file, const unsigned char *filename,
 			     struct evm_ima_xattr_data *xattr_value,
 			     int xattr_len, int opened);
-int ima_must_appraise(struct inode *inode, int mask, enum ima_hooks func);
+int ima_must_appraise(struct inode *inode, int mask, int func);
 void ima_update_xattr(struct integrity_iint_cache *iint, struct file *file);
 enum integrity_status ima_get_cache_status(struct integrity_iint_cache *iint,
 					   int func);
@@ -205,8 +213,7 @@ static inline int ima_appraise_measurement(int func,
 	return INTEGRITY_UNKNOWN;
 }
 
-static inline int ima_must_appraise(struct inode *inode, int mask,
-				    enum ima_hooks func)
+static inline int ima_must_appraise(struct inode *inode, int mask, int func)
 {
 	return 0;
 }
