@@ -305,7 +305,7 @@ static int get_subaction(struct ima_rule_entry *rule, int func)
 	case FIRMWARE_CHECK:
 		return IMA_FIRMWARE_APPRAISE;
 	case KEXEC_CHECK:
-		return IMA_KEXEC_APPRAISE;
+		return IMA_READ_APPRAISE;
 	case FILE_CHECK:
 	default:
 		return IMA_FILE_APPRAISE;

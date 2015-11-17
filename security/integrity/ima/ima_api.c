@@ -253,6 +253,7 @@ int ima_collected_measurement(struct integrity_iint_cache *iint,
 	iint->ima_hash = tmpbuf;
 	memcpy(iint->ima_hash, hash, length);
 	iint->version = file_inode(file)->i_version;
+	iint->flags &= ~(IMA_MEASURED | IMA_AUDITED| IMA_READ_APPRAISED);
 	iint->flags |= IMA_COLLECTED;
 	result = 0;
 
