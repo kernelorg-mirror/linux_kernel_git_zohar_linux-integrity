@@ -165,8 +165,8 @@ enum ima_hooks {
 	MMAP_CHECK,
 	BPRM_CHECK,
 	MODULE_CHECK,
-	FIRMWARE_CHECK,
-	POST_SETATTR};
+	POST_SETATTR
+};
 
 int ima_match_policy(struct inode *inode, enum ima_hooks func, int mask,
 		     int flags);

@@ -29,6 +29,7 @@
 #include <linux/syscore_ops.h>
 #include <linux/reboot.h>
 #include <linux/security.h>
+#include <linux/ima.h>
 
 #include <generated/utsrelease.h>
 
@@ -305,11 +306,17 @@ static int fw_read_file_contents(struct file *file, struct firmware_buf *fw_buf)
 	buf = vmalloc(size);
 	if (!buf)
 		return -ENOMEM;
-	rc = kernel_read(file, 0, buf, size);
-	if (rc != size) {
-		if (rc > 0)
-			rc = -EIO;
+
+	rc = ima_read_and_process_file(file, FIRMWARE_CHECK, buf, size);
+	if (rc == -EIO)
 		goto fail;
+	else if (rc != -EOPNOTSUPP) {
+		rc = kernel_read(file, 0, buf, size);
+		if (rc != size) {
+			if (rc > 0)
+				rc = -EIO;
+			goto fail;
+		}
 	}
 	rc = security_kernel_fw_from_file(file, buf, size);
 	if (rc)

@@ -13,7 +13,12 @@
 #include <linux/fs.h>
 struct linux_binprm;
 
-enum ima_read_hooks { KEXEC_CHECK = 1, INITRAMFS_CHECK, IMA_MAX_READ_CHECK};
+enum ima_read_hooks {
+	KEXEC_CHECK = 1,
+	INITRAMFS_CHECK,
+	FIRMWARE_CHECK,
+	IMA_MAX_READ_CHECK
+};
 
 #ifdef CONFIG_IMA
 extern int ima_bprm_check(struct linux_binprm *bprm);
