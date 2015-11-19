@@ -345,7 +345,7 @@ int ima_fw_from_file(struct file *file, char *buf, size_t size)
 			return -EACCES;	/* INTEGRITY_UNKNOWN */
 		return 0;
 	}
-	return process_measurement(file, NULL, 0, MAY_EXEC, FIRMWARE_CHECK, 0);
+	return 0;
 }
 
 /**

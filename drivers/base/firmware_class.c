@@ -29,6 +29,7 @@
 #include <linux/syscore_ops.h>
 #include <linux/reboot.h>
 #include <linux/security.h>
+#include <linux/ima.h>
 
 #include <generated/utsrelease.h>
 
@@ -311,6 +312,10 @@ static int fw_read_file_contents(struct file *file, struct firmware_buf *fw_buf)
 			rc = -EIO;
 		goto fail;
 	}
+	rc = ima_hash_and_process_file(file, buf, size, FIRMWARE_CHECK);
+	if (rc)
+		goto fail;
+
 	rc = security_kernel_fw_from_file(file, buf, size);
 	if (rc)
 		goto fail;

@@ -76,8 +76,6 @@ enum integrity_status ima_get_cache_status(struct integrity_iint_cache *iint,
 		return iint->ima_bprm_status;
 	case MODULE_CHECK:
 		return iint->ima_module_status;
-	case FIRMWARE_CHECK:
-		return iint->ima_firmware_status;
 	case KEXEC_CHECK ... IMA_MAX_READ_CHECK - 1:
 		return iint->ima_read_status;
 	case FILE_CHECK:
@@ -98,9 +96,6 @@ static void ima_set_cache_status(struct integrity_iint_cache *iint,
 		break;
 	case MODULE_CHECK:
 		iint->ima_module_status = status;
-		break;
-	case FIRMWARE_CHECK:
-		iint->ima_firmware_status = status;
 		break;
 	case KEXEC_CHECK ... IMA_MAX_READ_CHECK - 1:
 		iint->ima_read_status = status;
@@ -123,9 +118,6 @@ static void ima_cache_flags(struct integrity_iint_cache *iint, int func)
 		break;
 	case MODULE_CHECK:
 		iint->flags |= (IMA_MODULE_APPRAISED | IMA_APPRAISED);
-		break;
-	case FIRMWARE_CHECK:
-		iint->flags |= (IMA_FIRMWARE_APPRAISED | IMA_APPRAISED);
 		break;
 	case KEXEC_CHECK ... IMA_MAX_READ_CHECK - 1:
 		break;

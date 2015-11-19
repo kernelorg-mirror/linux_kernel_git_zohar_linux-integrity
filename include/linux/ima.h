@@ -16,6 +16,7 @@ struct linux_binprm;
 enum ima_policy_id {
 	KEXEC_CHECK = 1,
 	INITRAMFS_CHECK,
+	FIRMWARE_CHECK,
 	IMA_MAX_READ_CHECK
 };
 
