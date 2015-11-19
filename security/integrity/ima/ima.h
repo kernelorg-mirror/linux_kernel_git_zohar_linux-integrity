@@ -20,6 +20,7 @@
 #include <linux/types.h>
 #include <linux/crypto.h>
 #include <linux/security.h>
+#include <linux/ima.h>
 #include <linux/hash.h>
 #include <linux/tpm.h>
 #include <linux/audit.h>
@@ -159,7 +160,7 @@ void ima_free_template_entry(struct ima_template_entry *entry);
 const char *ima_d_path(struct path *path, char **pathbuf);
 
 /* IMA policy related functions */
-enum ima_hooks { FILE_CHECK = 1, MMAP_CHECK, BPRM_CHECK, MODULE_CHECK, FIRMWARE_CHECK, KEXEC_CHECK, POST_SETATTR };
+enum ima_hooks { FILE_CHECK = IMA_MAX_READ_CHECK, MMAP_CHECK, BPRM_CHECK, MODULE_CHECK, FIRMWARE_CHECK, POST_SETATTR};
 
 int ima_match_policy(struct inode *inode, enum ima_hooks func, int mask,
 		     int flags);

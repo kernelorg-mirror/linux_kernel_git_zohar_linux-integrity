@@ -182,7 +182,7 @@ kimage_file_prepare_segments(struct kimage *image, int kernel_fd, int initrd_fd,
 	int ret = 0;
 	void *ldata;
 
-	ret = ima_read_file_from_fd(kernel_fd, &image->kernel_buf,
+	ret = ima_read_file_from_fd(kernel_fd, KEXEC_CHECK, &image->kernel_buf,
 				    &image->kernel_buf_len);
 	if (ret == -EOPNOTSUPP)
 		ret = copy_file_from_fd(kernel_fd, &image->kernel_buf,
@@ -207,8 +207,12 @@ kimage_file_prepare_segments(struct kimage *image, int kernel_fd, int initrd_fd,
 #endif
 	/* It is possible that there no initramfs is being loaded */
 	if (!(flags & KEXEC_FILE_NO_INITRAMFS)) {
-		ret = copy_file_from_fd(initrd_fd, &image->initrd_buf,
-					&image->initrd_buf_len);
+		ret = ima_read_file_from_fd(initrd_fd, INITRAMFS_CHECK,
+					    &image->initrd_buf,
+					    &image->initrd_buf_len);
+		if (ret == -EOPNOTSUPP)
+			ret = copy_file_from_fd(initrd_fd, &image->initrd_buf,
+						&image->initrd_buf_len);
 		if (ret)
 			goto out;
 	}

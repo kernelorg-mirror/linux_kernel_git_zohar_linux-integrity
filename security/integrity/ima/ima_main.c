@@ -375,7 +375,8 @@ int ima_fw_from_file(struct file *file, char *buf, size_t size)
 	return process_measurement(file, MAY_EXEC, FIRMWARE_CHECK, NULL, 0);
 }
 
-int ima_read_file_from_fd(int fd, void **buf, size_t *buf_len)
+int ima_read_file_from_fd(int fd, enum ima_read_hooks func,
+			  void **buf, size_t *buf_len)
 {
 	struct fd f = fdget(fd);
 	int ret;
@@ -383,7 +384,7 @@ int ima_read_file_from_fd(int fd, void **buf, size_t *buf_len)
 	if (!f.file)
 		return -EBADF;
 
-	ret = ima_read_and_process_file(f.file, KEXEC_CHECK, buf, buf_len);
+	ret = ima_read_and_process_file(f.file, func, buf, buf_len);
 	fdput(f);
 	return ret;
 }

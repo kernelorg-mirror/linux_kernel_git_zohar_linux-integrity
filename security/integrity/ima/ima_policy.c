@@ -50,7 +50,10 @@ struct ima_rule_entry {
 	struct list_head list;
 	int action;
 	unsigned int flags;
-	enum ima_hooks func;
+	union {
+		enum ima_hooks func;
+		enum ima_read_hooks read_func;
+	};
 	int mask;
 	unsigned long fsmagic;
 	u8 fsuuid[16];
@@ -305,6 +308,7 @@ static int get_subaction(struct ima_rule_entry *rule, int func)
 	case FIRMWARE_CHECK:
 		return IMA_FIRMWARE_APPRAISE;
 	case KEXEC_CHECK:
+	case INITRAMFS_CHECK:
 		return IMA_READ_APPRAISE;
 	case FILE_CHECK:
 	default:
@@ -582,7 +586,9 @@ static int ima_parse_rule(char *rule, struct ima_rule_entry *entry)
 			else if (strcmp(args[0].from, "BPRM_CHECK") == 0)
 				entry->func = BPRM_CHECK;
 			else if (strcmp(args[0].from, "KEXEC_CHECK") == 0)
-				entry->func = KEXEC_CHECK;
+				entry->read_func = KEXEC_CHECK;
+			else if (strcmp(args[0].from, "INITRAMFS_CHECK") == 0)
+				entry->read_func = INITRAMFS_CHECK;
 			else
 				result = -EINVAL;
 			if (!result)
