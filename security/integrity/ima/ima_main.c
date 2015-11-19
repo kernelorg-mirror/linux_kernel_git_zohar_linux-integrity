@@ -364,15 +364,17 @@ static int ima_read_and_process_file(struct file *file, enum ima_hooks func,
 	return ret;
 }
 
-int ima_fw_from_file(struct file *file, char *buf, size_t size)
+int ima_read_file_contents(struct file *file, enum ima_read_hooks func,
+			   void **buf, size_t *buf_len)
 {
 	if (!file) {
-		if ((ima_appraise & IMA_APPRAISE_FIRMWARE) &&
-		    (ima_appraise & IMA_APPRAISE_ENFORCE))
+		if ((func == FIRMWARE_CHECK) &&
+		    ((ima_appraise & IMA_APPRAISE_FIRMWARE) &&
+		     (ima_appraise & IMA_APPRAISE_ENFORCE)))
 			return -EACCES;	/* INTEGRITY_UNKNOWN */
 		return 0;
 	}
-	return process_measurement(file, MAY_EXEC, FIRMWARE_CHECK, NULL, 0);
+	return ima_read_and_process_file(file, func, buf, buf_len);
 }
 
 int ima_read_file_from_fd(int fd, enum ima_read_hooks func,

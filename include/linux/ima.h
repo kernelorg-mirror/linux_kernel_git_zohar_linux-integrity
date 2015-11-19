@@ -13,7 +13,7 @@
 #include <linux/fs.h>
 struct linux_binprm;
 
-enum ima_read_hooks { KEXEC_CHECK = 1, INITRAMFS_CHECK, IMA_MAX_READ_CHECK};
+enum ima_read_hooks { KEXEC_CHECK = 1, INITRAMFS_CHECK, FIRMWARE_CHECK, IMA_MAX_READ_CHECK};
 
 #ifdef CONFIG_IMA
 extern int ima_bprm_check(struct linux_binprm *bprm);
@@ -22,6 +22,8 @@ extern void ima_file_free(struct file *file);
 extern int ima_file_mmap(struct file *file, unsigned long prot);
 extern int ima_module_check(struct file *file);
 extern int ima_fw_from_file(struct file *file, char *buf, size_t size);
+extern int ima_read_file_contents(struct file *file, enum ima_read_hooks func,
+				  void **buf, size_t *size);
 extern int ima_read_file_from_fd(int fd, enum ima_read_hooks func,
 				 void **buf, size_t *size);
 
@@ -51,9 +53,11 @@ static inline int ima_module_check(struct file *file)
 	return 0;
 }
 
-static inline int ima_fw_from_file(struct file *file, char *buf, size_t size)
+static inline int ima_read_file_contents(struct file *file,
+					 enum ima_read_hooks func,
+				 	 void **buf, size_t *size)
 {
-	return 0;
+	return -EOPNOTSUPP;
 }
 
 static inline int ima_read_file_from_fd(int fd, enum ima_read_hooks func,

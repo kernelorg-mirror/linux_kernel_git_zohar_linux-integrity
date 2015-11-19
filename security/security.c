@@ -886,12 +886,8 @@ int security_kernel_create_files_as(struct cred *new, struct inode *inode)
 
 int security_kernel_fw_from_file(struct file *file, char *buf, size_t size)
 {
-	int ret;
 
-	ret = call_int_hook(kernel_fw_from_file, 0, file, buf, size);
-	if (ret)
-		return ret;
-	return ima_fw_from_file(file, buf, size);
+	return call_int_hook(kernel_fw_from_file, 0, file, buf, size);
 }
 EXPORT_SYMBOL_GPL(security_kernel_fw_from_file);
 

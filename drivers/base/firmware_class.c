@@ -29,6 +29,7 @@
 #include <linux/syscore_ops.h>
 #include <linux/reboot.h>
 #include <linux/security.h>
+#include <linux/ima.h>
 
 #include <generated/utsrelease.h>
 
@@ -350,7 +351,11 @@ static int fw_get_filesystem_firmware(struct device *device,
 		file = filp_open(path, O_RDONLY, 0);
 		if (IS_ERR(file))
 			continue;
-		rc = fw_read_file_contents(file, buf);
+	
+		rc = ima_read_file_contents(file, FIRMWARE_CHECK,
+					    &buf->data, &buf->size);
+		if (rc == -EOPNOTSUPP)
+			rc = fw_read_file_contents(file, buf);
 		fput(file);
 		if (rc)
 			dev_warn(device, "firmware, attempted to load %s, but failed with error %d\n",
