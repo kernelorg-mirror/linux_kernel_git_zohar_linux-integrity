@@ -205,7 +205,8 @@ int integrity_kernel_read(struct file *file, loff_t offset,
  * size, read entire file content to the buffer and closes the file
  *
  */
-int integrity_read_file(const char *path, char **data)
+int integrity_read_file(const char *path, char **data,
+			enum ima_policy_id policy_id)
 {
 	struct file *file;
 	loff_t size;
@@ -235,6 +236,7 @@ int integrity_read_file(const char *path, char **data)
 	rc = integrity_kernel_read(file, 0, buf, size);
 	if (rc == size) {
 		*data = buf;
+		rc = ima_hash_and_process_file(file, buf, size, policy_id);
 	} else {
 		kfree(buf);
 		if (rc >= 0)

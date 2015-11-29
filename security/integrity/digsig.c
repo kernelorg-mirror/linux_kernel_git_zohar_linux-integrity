@@ -104,7 +104,7 @@ int __init integrity_load_x509(const unsigned int id, const char *path)
 	if (!keyring[id])
 		return -EINVAL;
 
-	rc = integrity_read_file(path, &data);
+	rc = integrity_read_file(path, &data, 0);
 	if (rc < 0)
 		return rc;
 

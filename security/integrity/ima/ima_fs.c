@@ -268,13 +268,12 @@ static ssize_t ima_read_policy(char *path)
 	datap = path;
 	strsep(&datap, "\n");
 
-	rc = integrity_read_file(path, &data);
+	rc = integrity_read_file(path, &data, POLICY_CHECK);
 	if (rc < 0)
 		return rc;
 
 	size = rc;
 	datap = data;
-
 	while (size > 0 && (p = strsep(&datap, "\n"))) {
 		pr_debug("rule: %s\n", p);
 		rc = ima_parse_add_rule(p);
@@ -324,7 +323,14 @@ static ssize_t ima_write_policy(struct file *file, const char __user *buf,
 
 	if (data[0] == '/')
 		result = ima_read_policy(data);
-	else
+	else if (ima_appraise & IMA_APPRAISE_POLICY) {
+		pr_err("IMA: signed policy required\n");
+		integrity_audit_msg(AUDIT_INTEGRITY_STATUS, NULL, NULL,
+				    "policy_update", "signed policy required",
+				    1, 0);
+		if (ima_appraise & IMA_APPRAISE_ENFORCE)
+			result = -EACCES;
+	} else
 		result = ima_parse_add_rule(data);
 out:
 	if (result < 0)
