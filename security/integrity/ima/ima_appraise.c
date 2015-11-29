@@ -79,6 +79,7 @@ enum integrity_status ima_get_cache_status(struct integrity_iint_cache *iint,
 	case FIRMWARE_CHECK:
 	case KEXEC_CHECK:
 	case INITRAMFS_CHECK:
+	case POLICY_CHECK:
 		return iint->ima_read_status;
 	case FILE_CHECK:
 	default:
@@ -102,6 +103,7 @@ static void ima_set_cache_status(struct integrity_iint_cache *iint,
 	case FIRMWARE_CHECK:
 	case KEXEC_CHECK:
 	case INITRAMFS_CHECK:
+	case POLICY_CHECK:
 		iint->ima_read_status = status;
 		break;
 	case FILE_CHECK:
@@ -126,6 +128,7 @@ static void ima_cache_flags(struct integrity_iint_cache *iint, int func)
 	case FIRMWARE_CHECK:
 	case KEXEC_CHECK:
 	case INITRAMFS_CHECK:
+	case POLICY_CHECK:
 		iint->flags |= (IMA_READ_APPRAISED | IMA_APPRAISED);
 		break;
 	case FILE_CHECK:

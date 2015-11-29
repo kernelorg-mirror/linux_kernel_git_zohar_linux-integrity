@@ -205,7 +205,8 @@ int integrity_kernel_read(struct file *file, loff_t offset,
  * size, read entire file content to the buffer and closes the file
  *
  */
-int integrity_read_file(const char *path, char **data)
+int integrity_read_file(const char *path, char **data,
+			enum ima_read_hooks read_func)
 {
 	struct file *file;
 	loff_t size;
@@ -222,6 +223,11 @@ int integrity_read_file(const char *path, char **data)
 		return rc;
 	}
 
+	if (!S_ISREG(file_inode(file)->i_mode)) {
+		rc = -EACCES;
+		goto out;
+	}
+
 	size = i_size_read(file_inode(file));
 	if (size <= 0)
 		goto out;
@@ -232,13 +238,18 @@ int integrity_read_file(const char *path, char **data)
 		goto out;
 	}
 
-	rc = integrity_kernel_read(file, 0, buf, size);
+	rc = ima_read_and_process_file(file, read_func, buf, size);
+	if (rc == -EOPNOTSUPP) {
+		rc = integrity_kernel_read(file, 0, buf, size);
+		if (rc > 0 && rc != size)
+			rc = -EIO;
+	}
 	if (rc < 0)
 		kfree(buf);
-	else if (rc != size)
-		rc = -EIO;
-	else
+	else {
+		rc = size;
 		*data = buf;
+	}
 out:
 	fput(file);
 	return rc;

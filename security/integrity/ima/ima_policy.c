@@ -116,6 +116,7 @@ static struct ima_rule_entry default_measurement_rules[] = {
 	 .uid = GLOBAL_ROOT_UID, .flags = IMA_FUNC | IMA_INMASK | IMA_UID},
 	{.action = MEASURE, .func = MODULE_CHECK, .flags = IMA_FUNC},
 	{.action = MEASURE, .read_func = FIRMWARE_CHECK, .flags = IMA_FUNC},
+	{.action = MEASURE, .read_func = POLICY_CHECK, .flags = IMA_FUNC},
 };
 
 static struct ima_rule_entry default_appraise_rules[] = {
@@ -307,6 +308,7 @@ static int get_subaction(struct ima_rule_entry *rule, int func)
 	case FIRMWARE_CHECK:
 	case KEXEC_CHECK:
 	case INITRAMFS_CHECK:
+	case POLICY_CHECK:
 		return IMA_READ_APPRAISE;
 	case FILE_CHECK:
 	default:
@@ -613,6 +615,8 @@ static int ima_parse_rule(char *rule, struct ima_rule_entry *entry)
 				entry->read_func = INITRAMFS_CHECK;
 			else if (strcmp(args[0].from, "FIRMWARE_CHECK") == 0)
 				entry->read_func = FIRMWARE_CHECK;
+			else if (strcmp(args[0].from, "POLICY_CHECK") == 0)
+				entry->read_func = POLICY_CHECK;
 			else
 				result = -EINVAL;
 			if (!result)
@@ -771,6 +775,8 @@ static int ima_parse_rule(char *rule, struct ima_rule_entry *entry)
 		temp_ima_appraise |= IMA_APPRAISE_MODULES;
 	else if (entry->read_func == FIRMWARE_CHECK)
 		temp_ima_appraise |= IMA_APPRAISE_FIRMWARE;
+	else if (entry->read_func == POLICY_CHECK)
+		temp_ima_appraise |= IMA_APPRAISE_POLICY;
 	audit_log_format(ab, "res=%d", !result);
 	audit_log_end(ab);
 	return result;
@@ -857,7 +863,8 @@ static char *mask_tokens[] = {
 enum {
 	func_file = 0, func_mmap, func_bprm,
 	func_module, func_post,
-	func_kexec, func_initramfs, func_firmware
+	func_kexec, func_initramfs, func_firmware,
+	func_policy
 };
 
 static char *func_tokens[] = {
@@ -868,7 +875,8 @@ static char *func_tokens[] = {
 	"POST_SETATTR",
 	"KEXEC_CHECK",
 	"INITRAMFS_CHECK",
-	"FIRMWARE_CHECK"
+	"FIRMWARE_CHECK",
+	"POLICY_CHECK"
 };
 
 void *ima_policy_start(struct seq_file *m, loff_t *pos)
@@ -955,6 +963,9 @@ int ima_policy_show(struct seq_file *m, void *v)
 				break;
 			case FIRMWARE_CHECK:
 				seq_printf(m, pt(Opt_func), ft(func_firmware));
+				break;
+			case POLICY_CHECK:
+				seq_printf(m, pt(Opt_func), ft(func_policy));
 				break;
 			default:
 				snprintf(tbuf, sizeof(tbuf), "%d", entry->func);

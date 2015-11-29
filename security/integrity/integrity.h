@@ -15,6 +15,7 @@
 #include <linux/integrity.h>
 #include <crypto/sha.h>
 #include <linux/key.h>
+#include <linux/ima.h>
 
 /* iint action cache flags */
 #define IMA_MEASURE		0x00000001
@@ -122,7 +123,8 @@ struct integrity_iint_cache *integrity_iint_find(struct inode *inode);
 
 int integrity_kernel_read(struct file *file, loff_t offset,
 			  char *addr, unsigned long count);
-int integrity_read_file(const char *path, char **data);
+int integrity_read_file(const char *path, char **data,
+			enum ima_read_hooks read_hooks);
 
 #define INTEGRITY_KEYRING_EVM		0
 #define INTEGRITY_KEYRING_IMA		1
