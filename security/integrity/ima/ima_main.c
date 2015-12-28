@@ -337,17 +337,6 @@ int ima_module_check(struct file *file)
 	return process_measurement(file, NULL, 0, MAY_EXEC, MODULE_CHECK, 0);
 }
 
-int ima_fw_from_file(struct file *file, char *buf, size_t size)
-{
-	if (!file) {
-		if ((ima_appraise & IMA_APPRAISE_FIRMWARE) &&
-		    (ima_appraise & IMA_APPRAISE_ENFORCE))
-			return -EACCES;	/* INTEGRITY_UNKNOWN */
-		return 0;
-	}
-	return 0;
-}
-
 /**
  * ima_hash_and_process_file - in memory collect/appraise/audit measurement
  * @file: pointer to the file to be measured/appraised/audit
@@ -362,6 +351,13 @@ int ima_fw_from_file(struct file *file, char *buf, size_t size)
 int ima_hash_and_process_file(struct file *file, void *buf, loff_t size,
 			      enum ima_policy_id policy_id)
 {
+	if (!file && policy_id == FIRMWARE_CHECK) {
+		if ((ima_appraise & IMA_APPRAISE_FIRMWARE) &&
+		    (ima_appraise & IMA_APPRAISE_ENFORCE))
+			return -EACCES;	/* INTEGRITY_UNKNOWN */
+		return 0;
+	}
+
 	if (!file || !buf || size == 0) { /* should never happen */
 		if (ima_appraise & IMA_APPRAISE_ENFORCE)
 			return -EACCES;

@@ -27,7 +27,6 @@ extern int ima_file_check(struct file *file, int mask, int opened);
 extern void ima_file_free(struct file *file);
 extern int ima_file_mmap(struct file *file, unsigned long prot);
 extern int ima_module_check(struct file *file);
-extern int ima_fw_from_file(struct file *file, char *buf, size_t size);
 extern int ima_hash_and_process_file(struct file *file,
 				     void *buf, loff_t size,
 				     enum ima_policy_id policy_id);
@@ -54,11 +53,6 @@ static inline int ima_file_mmap(struct file *file, unsigned long prot)
 }
 
 static inline int ima_module_check(struct file *file)
-{
-	return 0;
-}
-
-static inline int ima_fw_from_file(struct file *file, char *buf, size_t size)
 {
 	return 0;
 }

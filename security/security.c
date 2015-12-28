@@ -884,17 +884,6 @@ int security_kernel_create_files_as(struct cred *new, struct inode *inode)
 	return call_int_hook(kernel_create_files_as, 0, new, inode);
 }
 
-int security_kernel_fw_from_file(struct file *file, char *buf, size_t size)
-{
-	int ret;
-
-	ret = call_int_hook(kernel_fw_from_file, 0, file, buf, size);
-	if (ret)
-		return ret;
-	return ima_fw_from_file(file, buf, size);
-}
-EXPORT_SYMBOL_GPL(security_kernel_fw_from_file);
-
 int security_kernel_module_request(char *kmod_name)
 {
 	return call_int_hook(kernel_module_request, 0, kmod_name);
@@ -913,10 +902,17 @@ int security_kernel_module_from_file(struct file *file)
 int security_kernel_post_read_file(struct file *file, char *buf, loff_t size,
 				   int policy_id)
 {
-	int ret;
+	int ret = 0;
 
-	ret = call_int_hook(kernel_post_read_file, 0, file, buf, size,
-			    policy_id);
+	switch (policy_id) {
+	case FIRMWARE_CHECK:
+		ret = call_int_hook(kernel_fw_from_file, 0, file, buf, size);
+		break;
+	default:
+		ret = call_int_hook(kernel_post_read_file, 0, file, buf, size,
+				    policy_id);
+		break;
+	}
 	if (ret)
 		return ret;
 
