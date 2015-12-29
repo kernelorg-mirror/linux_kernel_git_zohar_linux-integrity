@@ -22,6 +22,7 @@
 #include <linux/rculist.h>
 #include <linux/rcupdate.h>
 #include <linux/parser.h>
+#include <linux/vmalloc.h>
 
 #include "ima.h"
 
@@ -260,19 +261,21 @@ static const struct file_operations ima_ascii_measurements_ops = {
 
 static ssize_t ima_read_policy(char *path)
 {
-	char *data, *datap;
-	int rc, size, pathlen = strlen(path);
+	void *data;
+	char *datap;
+	loff_t size;
+	int rc, pathlen = strlen(path);
+
 	char *p;
 
 	/* remove \n */
 	datap = path;
 	strsep(&datap, "\n");
 
-	rc = integrity_read_file(path, &data, POLICY_CHECK);
+	rc = kernel_read_file_from_path(path, &data, &size, 0, POLICY_CHECK);
 	if (rc < 0)
 		return rc;
 
-	size = rc;
 	datap = data;
 	while (size > 0 && (p = strsep(&datap, "\n"))) {
 		pr_debug("rule: %s\n", p);
@@ -282,7 +285,7 @@ static ssize_t ima_read_policy(char *path)
 		size -= rc;
 	}
 
-	kfree(data);
+	vfree(data);
 	if (rc < 0)
 		return rc;
 	else if (size)
