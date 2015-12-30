@@ -101,7 +101,7 @@ static struct ima_rule_entry original_measurement_rules[] = {
 	 .flags = IMA_FUNC | IMA_MASK},
 	{.action = MEASURE, .hooks.func = FILE_CHECK, .mask = MAY_READ,
 	 .uid = GLOBAL_ROOT_UID, .flags = IMA_FUNC | IMA_MASK | IMA_UID},
-	{.action = MEASURE, .hooks.func = MODULE_CHECK, .flags = IMA_FUNC},
+	{.action = MEASURE, .hooks.policy_id = MODULE_CHECK, .flags = IMA_FUNC},
 	{.action = MEASURE, .hooks.policy_id = FIRMWARE_CHECK,
 	 .flags = IMA_FUNC},
 };
@@ -309,8 +309,6 @@ static int get_subaction(struct ima_rule_entry *rule, int func)
 		return IMA_MMAP_APPRAISE;
 	case BPRM_CHECK:
 		return IMA_BPRM_APPRAISE;
-	case MODULE_CHECK:
-		return IMA_MODULE_APPRAISE;
 	case KEXEC_CHECK ... IMA_MAX_READ_CHECK - 1:
 		return IMA_READ_APPRAISE;
 	case FILE_CHECK:
@@ -615,8 +613,6 @@ static int ima_parse_rule(char *rule, struct ima_rule_entry *entry)
 			/* PATH_CHECK is for backwards compat */
 			else if (strcmp(args[0].from, "PATH_CHECK") == 0)
 				entry->hooks.func = FILE_CHECK;
-			else if (strcmp(args[0].from, "MODULE_CHECK") == 0)
-				entry->hooks.func = MODULE_CHECK;
 			else if ((strcmp(args[0].from, "FILE_MMAP") == 0)
 				|| (strcmp(args[0].from, "MMAP_CHECK") == 0))
 				entry->hooks.func = MMAP_CHECK;
@@ -630,6 +626,8 @@ static int ima_parse_rule(char *rule, struct ima_rule_entry *entry)
 				entry->hooks.policy_id = FIRMWARE_CHECK;
 			else if (strcmp(args[0].from, "POLICY_CHECK") == 0)
 				entry->hooks.policy_id = POLICY_CHECK;
+			else if (strcmp(args[0].from, "MODULE_CHECK") == 0)
+				entry->hooks.policy_id = MODULE_CHECK;
 			else
 				result = -EINVAL;
 			if (!result)
@@ -784,7 +782,7 @@ static int ima_parse_rule(char *rule, struct ima_rule_entry *entry)
 	}
 	if (!result && (entry->action == UNKNOWN))
 		result = -EINVAL;
-	else if (entry->hooks.func == MODULE_CHECK)
+	else if (entry->hooks.policy_id == MODULE_CHECK)
 		temp_ima_appraise |= IMA_APPRAISE_MODULES;
 	else if (entry->hooks.policy_id == FIRMWARE_CHECK)
 		temp_ima_appraise |= IMA_APPRAISE_FIRMWARE;
@@ -960,9 +958,6 @@ int ima_policy_show(struct seq_file *m, void *v)
 		case BPRM_CHECK:
 			seq_printf(m, pt(Opt_func), ft(func_bprm));
 			break;
-		case MODULE_CHECK:
-			seq_printf(m, pt(Opt_func), ft(func_module));
-			break;
 		case POST_SETATTR:
 			seq_printf(m, pt(Opt_func), ft(func_post));
 			break;
@@ -979,6 +974,9 @@ int ima_policy_show(struct seq_file *m, void *v)
 				break;
 			case POLICY_CHECK:
 				seq_printf(m, pt(Opt_func), ft(func_policy));
+				break;
+			case MODULE_CHECK:
+				seq_printf(m, pt(Opt_func), ft(func_module));
 				break;
 			default:
 				snprintf(tbuf, sizeof(tbuf), "%d",

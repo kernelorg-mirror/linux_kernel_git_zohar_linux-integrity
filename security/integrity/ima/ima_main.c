@@ -334,7 +334,7 @@ int ima_module_check(struct file *file)
 #endif
 		return 0;	/* We rely on module signature checking */
 	}
-	return process_measurement(file, NULL, 0, MAY_EXEC, MODULE_CHECK, 0);
+	return 0;
 }
 
 /**
@@ -357,6 +357,9 @@ int ima_hash_and_process_file(struct file *file, void *buf, loff_t size,
 			return -EACCES;	/* INTEGRITY_UNKNOWN */
 		return 0;
 	}
+
+	if (!file && policy_id == MODULE_CHECK) /* MODULE_SIG_FORCE enabled */
+		return 0;
 
 	if (!file || !buf || size == 0) { /* should never happen */
 		if (ima_appraise & IMA_APPRAISE_ENFORCE)

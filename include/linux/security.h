@@ -301,6 +301,7 @@ int security_kernel_act_as(struct cred *new, u32 secid);
 int security_kernel_create_files_as(struct cred *new, struct inode *inode);
 int security_kernel_module_request(char *kmod_name);
 int security_kernel_module_from_file(struct file *file);
+int security_kernel_read_file(struct file *file, int policy_id);
 int security_kernel_post_read_file(struct file *file, char *buf, loff_t size,
 				   int policy_id);
 int security_task_fix_setuid(struct cred *new, const struct cred *old,
@@ -857,7 +858,7 @@ static inline int security_kernel_module_request(char *kmod_name)
 	return 0;
 }
 
-static inline int security_kernel_module_from_file(struct file *file)
+static inline int security_kernel_read_file(struct file *file, int policy_id)
 {
 	return 0;
 }
