@@ -56,6 +56,7 @@ struct ima_rule_entry {
 	union {
 		enum ima_hooks func;
 		enum ima_policy_id policy_id;
+		enum ima_buffer_id buffer_id;
 	} hooks;
 	int mask;
 	unsigned long fsmagic;
@@ -363,6 +364,29 @@ int ima_match_policy(struct inode *inode, int func, int mask, int flags)
 	return action;
 }
 
+/**
+ * ima_match_buffer_id - decision based on policy containing buffer id
+ * @buffer_id: IMA buffer identifier
+ *
+ * Measure decision based the buffer identifier's existence in policy.
+ * (Without an inode, buffers can only be measured, not appraised.)
+ */
+int ima_match_buffer_id(enum ima_buffer_id buffer_id)
+{
+	struct ima_rule_entry *entry;
+	int result = 0;
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(entry, ima_rules, list) {
+		if ((entry->action == MEASURE) && (entry->flags & IMA_FUNC) &&
+		    (entry->hooks.buffer_id == buffer_id))
+			result = 1;
+	}
+	rcu_read_unlock();
+
+	return result;
+}
+
 /*
  * Initialize the ima_policy_flag variable based on the currently
  * loaded policy.  Based on this flag, the decision to short circuit
@@ -628,6 +652,8 @@ static int ima_parse_rule(char *rule, struct ima_rule_entry *entry)
 				entry->hooks.policy_id = POLICY_CHECK;
 			else if (strcmp(args[0].from, "MODULE_CHECK") == 0)
 				entry->hooks.policy_id = MODULE_CHECK;
+			else if (strcmp(args[0].from, "BOOT_CHECK") == 0)
+				entry->hooks.buffer_id = BOOT_CHECK;
 			else
 				result = -EINVAL;
 			if (!result)
@@ -875,7 +901,7 @@ enum {
 	func_file = 0, func_mmap, func_bprm,
 	func_module, func_post,
 	func_kexec, func_initramfs, func_firmware,
-	func_policy
+	func_policy, func_cmdline
 };
 
 static char *func_tokens[] = {
@@ -887,7 +913,8 @@ static char *func_tokens[] = {
 	"KEXEC_CHECK",
 	"INITRAMFS_CHECK",
 	"FIRMWARE_CHECK",
-	"POLICY_CHECK"
+	"POLICY_CHECK",
+	"BOOT_CHECK"
 };
 
 void *ima_policy_start(struct seq_file *m, loff_t *pos)
@@ -977,6 +1004,9 @@ int ima_policy_show(struct seq_file *m, void *v)
 				break;
 			case MODULE_CHECK:
 				seq_printf(m, pt(Opt_func), ft(func_module));
+				break;
+			case BOOT_CHECK:
+				seq_printf(m, pt(Opt_func), ft(func_cmdline));
 				break;
 			default:
 				snprintf(tbuf, sizeof(tbuf), "%d",

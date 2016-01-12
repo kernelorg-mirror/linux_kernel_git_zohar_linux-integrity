@@ -22,12 +22,19 @@ enum ima_policy_id {
 	IMA_MAX_READ_CHECK
 };
 
+enum ima_buffer_id {
+	BOOT_CHECK = IMA_MAX_READ_CHECK,
+	IMA_MAX_BUFFER_ID
+};
+
 #ifdef CONFIG_IMA
 extern int ima_bprm_check(struct linux_binprm *bprm);
 extern int ima_file_check(struct file *file, int mask, int opened);
 extern void ima_file_free(struct file *file);
 extern int ima_file_mmap(struct file *file, unsigned long prot);
 extern int ima_module_check(struct file *file);
+extern void ima_buffer_check(void *buf, loff_t size,
+			     enum ima_buffer_id buffer_id);
 extern int ima_hash_and_process_file(struct file *file,
 				     void *buf, loff_t size,
 				     enum ima_policy_id policy_id);
@@ -58,13 +65,18 @@ static inline int ima_module_check(struct file *file)
 	return 0;
 }
 
+static inline void ima_buffer_check(void *buf, loff_t size,
+				    enum ima_buffer_id buffer_id)
+{
+	return;
+}
+
 static inline int ima_hash_and_process_file(struct file *file,
 					    void *buf, loff_t size,
 					    enum ima_policy_id policy_id)
 {
 	return 0;
 }
-
 #endif /* CONFIG_IMA */
 
 #ifdef CONFIG_IMA_APPRAISE

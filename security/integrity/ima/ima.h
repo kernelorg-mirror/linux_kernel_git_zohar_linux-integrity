@@ -122,6 +122,7 @@ void ima_putc(struct seq_file *m, void *data, int datalen);
 void ima_print_digest(struct seq_file *m, u8 *digest, u32 size);
 struct ima_template_desc *ima_template_desc_current(void);
 int ima_init_template(void);
+int ima_match_buffer_id(enum ima_buffer_id buffer_id);
 
 /*
  * used to protect h_table and sha_table
@@ -161,7 +162,7 @@ const char *ima_d_path(struct path *path, char **pathbuf);
 
 /* IMA policy related functions */
 enum ima_hooks {
-	FILE_CHECK = IMA_MAX_READ_CHECK,
+	FILE_CHECK = IMA_MAX_BUFFER_ID,
 	MMAP_CHECK,
 	BPRM_CHECK,
 	POST_SETATTR

@@ -24,6 +24,7 @@
 #include <linux/slab.h>
 #include <linux/xattr.h>
 #include <linux/ima.h>
+#include <crypto/hash_info.h>
 
 #include "ima.h"
 
@@ -335,6 +336,72 @@ int ima_module_check(struct file *file)
 		return 0;	/* We rely on module signature checking */
 	}
 	return 0;
+}
+
+static void process_buffer_measurement(void *buf, loff_t size,
+				       enum ima_buffer_id buffer_id)
+{
+	struct ima_template_entry *entry;
+	struct integrity_iint_cache tmp_iint, *iint = &tmp_iint;
+	struct ima_event_data event_data = {iint, NULL, NULL, NULL, 0, NULL};
+	struct ima_digest_data *hash;
+	char *name;
+	int length = hash_digest_size[ima_hash_algo];
+	int violation = 0;
+	int result;
+
+	hash = kzalloc(sizeof(*hash) + length, GFP_KERNEL);
+	if (!hash)
+		return;
+
+	hash->algo = ima_hash_algo;
+	result = ima_calc_buffer_hash(buf, size, hash);
+	if (result < 0)
+		goto out;
+
+	iint->ima_hash = hash;
+	iint->ima_hash->algo = ima_hash_algo;
+	iint->ima_hash->length = length;
+
+	switch (buffer_id) {
+	case BOOT_CHECK:
+		name = "boot-cmdline";
+		break;
+	default:
+		name = "unknown";
+	}
+
+	event_data.filename = name;
+	result = ima_alloc_init_template(&event_data, &entry);
+	if (result < 0)
+		goto out;
+
+	result = ima_store_template(entry, violation, NULL, name);
+	if (result < 0) {
+		ima_free_template_entry(entry);
+		goto out;
+	}
+	return;
+
+out:
+	kfree(hash);
+}
+
+/**
+ * ima_buffer_check - based on policy, collect & store buffer measurement
+ * @buf: pointer to buffer
+ * @size: size of buffer
+ * @buffer_id: caller identifier
+ *
+ * Buffers can only be measured, not appraised.  The buffer identifier
+ * is used as the measurement list entry name (eg. boot_cmdline).
+ */
+void ima_buffer_check(void *buf, loff_t size, enum ima_buffer_id buffer_id)
+{
+	if (!ima_match_buffer_id(buffer_id))
+		return;
+
+	process_buffer_measurement(buf, size, buffer_id);
 }
 
 /**
