@@ -154,6 +154,8 @@ enum ima_hooks {
 	MAX_CHECK
 };
 
+int ima_match_buffer_id(enum ima_hooks func, int *pcr);
+
 /* LIM API function definitions */
 int ima_get_action(struct inode *inode, int mask,
 		   enum ima_hooks func, int *pcr);

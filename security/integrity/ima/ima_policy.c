@@ -370,6 +370,32 @@ int ima_match_policy(struct inode *inode, enum ima_hooks func, int mask,
 	return action;
 }
 
+/**
+ * ima_match_buffer_id - decision based on policy
+ * @buffer_id: IMA buffer identifier
+ *
+ * Measure decision based the buffer identifier's existence in policy.
+ * Without an inode, buffers can only be measured, not appraised.
+ */
+int ima_match_buffer_id(enum ima_hooks func, int *pcr)
+{
+	struct ima_rule_entry *entry;
+	int result = 0;
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(entry, ima_rules, list) {
+		if ((entry->action == MEASURE) && (entry->flags & IMA_FUNC) &&
+		     (entry->func == func)) {
+			if (entry->flags & IMA_PCR)
+				*pcr = entry->pcr;
+			result = 1;
+		}
+	}
+	rcu_read_unlock();
+
+	return result;
+}
+
 /*
  * Initialize the ima_policy_flag variable based on the currently
  * loaded policy.  Based on this flag, the decision to short circuit

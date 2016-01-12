@@ -13,6 +13,10 @@
 #include <linux/fs.h>
 struct linux_binprm;
 
+enum ima_buffer_id {
+	MEASURING_MAX_BUFFER_ID
+};
+
 #ifdef CONFIG_IMA
 extern int ima_bprm_check(struct linux_binprm *bprm);
 extern int ima_file_check(struct file *file, int mask, int opened);
@@ -22,6 +26,8 @@ extern int ima_read_file(struct file *file, enum kernel_read_file_id id);
 extern int ima_post_read_file(struct file *file, void *buf, loff_t size,
 			      enum kernel_read_file_id id);
 extern void ima_post_path_mknod(struct dentry *dentry);
+extern void ima_buffer_check(void *buf, loff_t size,
+			     enum ima_buffer_id buffer_id);
 
 #else
 static inline int ima_bprm_check(struct linux_binprm *bprm)
@@ -60,6 +66,11 @@ static inline void ima_post_path_mknod(struct dentry *dentry)
 	return;
 }
 
+static inline void ima_buffer_check(void *buf, loff_t size,
+				    enum ima_buffer_id buffer_id)
+{
+	return;
+}
 #endif /* CONFIG_IMA */
 
 #ifdef CONFIG_IMA_APPRAISE
