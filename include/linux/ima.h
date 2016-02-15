@@ -14,6 +14,7 @@
 struct linux_binprm;
 
 enum ima_buffer_id {
+	MEASURING_KEXEC_CMDLINE,
 	MEASURING_MAX_BUFFER_ID
 };
 

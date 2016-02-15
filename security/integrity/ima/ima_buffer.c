@@ -20,6 +20,8 @@ struct buffer_idmap {
 };
 
 static struct buffer_idmap _idmap[MEASURING_MAX_BUFFER_ID] = {
+	[MEASURING_KEXEC_CMDLINE].func = KEXEC_CMDLINE_CHECK,
+	[MEASURING_KEXEC_CMDLINE].buf = "boot-cmdline",
 };
 
 static void process_buffer_measurement(void *buf, loff_t size,
