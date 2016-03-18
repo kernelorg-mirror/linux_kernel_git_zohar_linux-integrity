@@ -15,6 +15,7 @@ struct linux_binprm;
 
 enum ima_buffer_id {
 	MEASURING_KEXEC_CMDLINE,
+	MEASURING_PRECALC_DATA,
 	MEASURING_MAX_BUFFER_ID
 };
 
@@ -29,6 +30,9 @@ extern int ima_post_read_file(struct file *file, void *buf, loff_t size,
 extern void ima_post_path_mknod(struct dentry *dentry);
 extern void ima_buffer_check(void *buf, loff_t size,
 			     enum ima_buffer_id buffer_id);
+extern int ima_add_measurement_check(const char *hashname, u8 *digest,
+				     loff_t size, enum ima_buffer_id buffer_id,
+				     char *hint);
 
 #else
 static inline int ima_bprm_check(struct linux_binprm *bprm)
@@ -71,6 +75,14 @@ static inline void ima_buffer_check(void *buf, loff_t size,
 				    enum ima_buffer_id buffer_id)
 {
 	return;
+}
+
+static inline int ima_add_measurement_check(const char *hashname, u8 *digest,
+					     loff_t size,
+					     enum ima_buffer_id buffer_id,
+					     char *hint)
+{
+	return 0;
 }
 #endif /* CONFIG_IMA */
 

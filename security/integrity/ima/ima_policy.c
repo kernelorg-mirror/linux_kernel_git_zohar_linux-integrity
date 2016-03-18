@@ -20,6 +20,7 @@
 #include <linux/rculist.h>
 #include <linux/genhd.h>
 #include <linux/seq_file.h>
+#include <linux/ima.h>
 
 #include "ima.h"
 
@@ -53,6 +54,12 @@ enum lsm_rule_types { LSM_OBJ_USER, LSM_OBJ_ROLE, LSM_OBJ_TYPE,
 };
 
 enum policy_types { ORIGINAL_TCB = 1, DEFAULT_TCB };
+
+#ifdef CONFIG_IMA_PRECALC_RULES
+static int permit_measuring_precalc_rules = 1;
+#else
+static int permit_measuring_precalc_rules;
+#endif
 
 struct ima_rule_entry {
 	struct list_head list;
@@ -668,6 +675,9 @@ static int ima_parse_rule(char *rule, struct ima_rule_entry *entry)
 				entry->func = KEXEC_CMDLINE_CHECK;
 			else if (strcmp(args[0].from, "POLICY_CHECK") == 0)
 				entry->func = POLICY_CHECK;
+			else if ((strcmp(args[0].from, "PRECALC_CHECK") == 0)
+				 && permit_measuring_precalc_rules)
+				entry->func = PRECALC_CHECK;
 			else
 				result = -EINVAL;
 			if (!result)
@@ -929,7 +939,7 @@ enum {
 	func_file = 0, func_mmap, func_bprm,
 	func_module, func_firmware, func_post,
 	func_kexec_kernel, func_kexec_initramfs,
-	func_kexec_cmdline, func_policy
+	func_kexec_cmdline, func_policy, func_precalc
 };
 
 static char *func_tokens[] = {
@@ -942,7 +952,8 @@ static char *func_tokens[] = {
 	"KEXEC_KERNEL_CHECK",
 	"KEXEC_INITRAMFS_CHECK",
 	"KEXEC_CMDLINE_CHECK",
-	"POLICY_CHECK"
+	"POLICY_CHECK",
+	"PRECALC_CHECK"
 };
 
 void *ima_policy_start(struct seq_file *m, loff_t *pos)
@@ -1018,6 +1029,9 @@ static void policy_func_show(struct seq_file *m, enum ima_hooks func)
 		break;
 	case POLICY_CHECK:
 		seq_printf(m, pt(Opt_func), ft(func_policy));
+		break;
+	case PRECALC_CHECK:
+		seq_printf(m, pt(Opt_func), ft(func_precalc));
 		break;
 	default:
 		snprintf(tbuf, sizeof(tbuf), "%d", func);

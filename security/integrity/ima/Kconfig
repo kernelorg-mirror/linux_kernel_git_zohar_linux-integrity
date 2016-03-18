@@ -44,6 +44,14 @@ config IMA_LSM_RULES
 	help
 	  Disabling this option will disregard LSM based policy rules.
 
+config IMA_PRECALC_RULES
+	bool "Permit pre-calculated measurements (EXPERIMENTAL)"
+	depends on IMA
+	default n
+	help
+	  Enabling this option will permit pre-calculated measurements
+	  to be added to the IMA measurement list.
+
 choice
 	prompt "Default template"
 	default IMA_NG_TEMPLATE
