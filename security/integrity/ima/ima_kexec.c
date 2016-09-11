@@ -34,6 +34,10 @@ static int ima_dump_measurement_list(unsigned long *buffer_size, void **buffer,
 	struct ima_queue_entry *qe;
 	struct seq_file file;
 	struct ima_kexec_hdr khdr;
+	struct {
+		struct ima_digest_data hdr;
+		char digest[SHA256_DIGEST_SIZE];
+	} hash = {.hdr.algo = HASH_ALGO_SHA256};
 	int ret = 0;
 
 	/* segment size can't change between kexec load and execute */
@@ -64,15 +68,25 @@ static int ima_dump_measurement_list(unsigned long *buffer_size, void **buffer,
 
 	/*
 	 * fill in reserved space with some buffer details
-	 * (eg. version, buffer size, number of measurements)
+	 * (eg. buffer hash, version, buffer size, number of measurements)
 	 */
 	khdr.buffer_size = file.count;
+	memset(file.buf + file.count, 0, file.size - file.count);
+
 	if (ima_canonical_fmt) {
 		khdr.version = cpu_to_le16(khdr.version);
 		khdr.count = cpu_to_le64(khdr.count);
 		khdr.buffer_size = cpu_to_le64(khdr.buffer_size);
 	}
 	memcpy(file.buf, &khdr, sizeof(khdr));
+
+	ret = ima_calc_buffer_hash(file.buf + sizeof(khdr.digest),
+				   file.size - sizeof(khdr.digest),
+				   &hash.hdr);
+	if (ret < 0)
+		goto out;
+
+	memcpy(file.buf, &hash.digest, sizeof(hash.digest));
 
 	print_hex_dump(KERN_DEBUG, "ima dump: ", DUMP_PREFIX_NONE,
 			16, 1, file.buf,
@@ -81,7 +95,7 @@ static int ima_dump_measurement_list(unsigned long *buffer_size, void **buffer,
 	*buffer_size = file.count;
 	*buffer = file.buf;
 out:
-	if (ret == -EINVAL)
+	if (ret < 0)
 		vfree(file.buf);
 	return ret;
 }

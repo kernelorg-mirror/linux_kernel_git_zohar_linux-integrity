@@ -352,6 +352,11 @@ int ima_restore_measurement_list(loff_t size, void *buf)
 		char template_data[0];
 	} __packed;
 
+	struct {
+		struct ima_digest_data hdr;
+		char digest[SHA256_DIGEST_SIZE];
+	} hash = {.hdr.algo = HASH_ALGO_SHA256};
+
 	struct ima_kexec_hdr *khdr = buf;
 	struct binary_hdr_v1 *hdr_v1;
 	struct binary_data_v1 *data_v1;
@@ -366,6 +371,20 @@ int ima_restore_measurement_list(loff_t size, void *buf)
 	if (!buf || size < sizeof(*khdr))
 		return 0;
 
+	ret = ima_calc_buffer_hash(buf + sizeof(khdr->digest),
+				   size - sizeof(khdr->digest),
+				   &hash.hdr);
+	if (ret < 0) {
+		pr_err("verifying measurement list digest failed");
+		return 0;
+	}
+
+	ret = memcmp(buf, &hash.digest, sizeof(khdr->digest));
+	if (ret) {
+		pr_err("verifying measurement list digest failed");
+		return 0;
+	}
+
 	if (ima_canonical_fmt) {
 		khdr->version = le16_to_cpu(khdr->version);
 		khdr->count = le64_to_cpu(khdr->count);
@@ -378,7 +397,7 @@ int ima_restore_measurement_list(loff_t size, void *buf)
 	}
 
 	/*
-	 * ima kexec buffer prefix: version, buffer size, count
+	 * ima kexec buffer prefix: buffer hash, version, buffer size, count
 	 * v1 format: pcr, digest, template-name-len, template-name,
 	 *	      template-data-size, template-data
 	 */
