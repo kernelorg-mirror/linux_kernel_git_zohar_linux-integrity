@@ -1337,7 +1337,8 @@ static long vhost_net_compat_ioctl(struct file *f, unsigned int ioctl,
 }
 #endif
 
-static ssize_t vhost_net_chr_read_iter(struct kiocb *iocb, struct iov_iter *to)
+static ssize_t vhost_net_chr_read_iter(struct kiocb *iocb, struct iov_iter *to,
+				       bool rwf)
 {
 	struct file *file = iocb->ki_filp;
 	struct vhost_net *n = file->private_data;

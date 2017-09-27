@@ -1750,7 +1750,8 @@ static ssize_t tun_do_read(struct tun_struct *tun, struct tun_file *tfile,
 	return ret;
 }
 
-static ssize_t tun_chr_read_iter(struct kiocb *iocb, struct iov_iter *to)
+static ssize_t tun_chr_read_iter(struct kiocb *iocb, struct iov_iter *to,
+				 bool rwf)
 {
 	struct file *file = iocb->ki_filp;
 	struct tun_file *tfile = file->private_data;

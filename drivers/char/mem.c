@@ -635,7 +635,8 @@ static ssize_t write_null(struct file *file, const char __user *buf,
 	return count;
 }
 
-static ssize_t read_iter_null(struct kiocb *iocb, struct iov_iter *to)
+static ssize_t read_iter_null(struct kiocb *iocb, struct iov_iter *to,
+			      bool rwf)
 {
 	return 0;
 }
@@ -659,7 +660,8 @@ static ssize_t splice_write_null(struct pipe_inode_info *pipe, struct file *out,
 	return splice_from_pipe(pipe, out, ppos, len, flags, pipe_to_null);
 }
 
-static ssize_t read_iter_zero(struct kiocb *iocb, struct iov_iter *iter)
+static ssize_t read_iter_zero(struct kiocb *iocb, struct iov_iter *iter,
+			      bool rwf)
 {
 	size_t written = 0;
 

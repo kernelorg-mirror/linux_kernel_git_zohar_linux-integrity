@@ -141,7 +141,8 @@ static int hypfs_open(struct inode *inode, struct file *filp)
 	return nonseekable_open(inode, filp);
 }
 
-static ssize_t hypfs_read_iter(struct kiocb *iocb, struct iov_iter *to)
+static ssize_t hypfs_read_iter(struct kiocb *iocb, struct iov_iter *to,
+			       bool rwf)
 {
 	struct file *file = iocb->ki_filp;
 	char *data = file->private_data;

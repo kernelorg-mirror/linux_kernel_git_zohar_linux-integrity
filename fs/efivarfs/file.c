@@ -65,7 +65,7 @@ out:
 }
 
 static ssize_t efivarfs_file_read_iter(struct kiocb *iocb,
-				       struct iov_iter *iter)
+				       struct iov_iter *iter, bool rwf)
 {
 	struct file *file = iocb->ki_filp;
 	struct efivar_entry *var = file->private_data;

@@ -29,7 +29,8 @@
 #include "acl.h"
 
 #ifdef CONFIG_FS_DAX
-static ssize_t ext2_dax_read_iter(struct kiocb *iocb, struct iov_iter *to)
+static ssize_t ext2_dax_read_iter(struct kiocb *iocb, struct iov_iter *to,
+				  bool rwf)
 {
 	struct inode *inode = iocb->ki_filp->f_mapping->host;
 	ssize_t ret;
@@ -160,13 +161,14 @@ int ext2_fsync(struct file *file, loff_t start, loff_t end, int datasync)
 	return ret;
 }
 
-static ssize_t ext2_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
+static ssize_t ext2_file_read_iter(struct kiocb *iocb, struct iov_iter *to,
+				   bool rwf)
 {
 #ifdef CONFIG_FS_DAX
 	if (IS_DAX(iocb->ki_filp->f_mapping->host))
-		return ext2_dax_read_iter(iocb, to);
+		return ext2_dax_read_iter(iocb, to, rwf);
 #endif
-	return generic_file_read_iter(iocb, to);
+	return generic_file_read_iter(iocb, to, rwf);
 }
 
 static ssize_t ext2_file_write_iter(struct kiocb *iocb, struct iov_iter *from)

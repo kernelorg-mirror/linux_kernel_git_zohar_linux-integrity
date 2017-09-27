@@ -719,7 +719,7 @@ static int vvp_io_read_start(const struct lu_env *env,
 	/* BUG: 5972 */
 	file_accessed(file);
 	LASSERT(vio->vui_iocb->ki_pos == pos);
-	result = generic_file_read_iter(vio->vui_iocb, vio->vui_iter);
+	result = generic_file_read_iter(vio->vui_iocb, vio->vui_iter, 0);
 
 out:
 	if (result >= 0) {

@@ -32,7 +32,8 @@
 #include "acl.h"
 
 #ifdef CONFIG_FS_DAX
-static ssize_t ext4_dax_read_iter(struct kiocb *iocb, struct iov_iter *to)
+static ssize_t ext4_dax_read_iter(struct kiocb *iocb, struct iov_iter *to,
+				  bool rwf)
 {
 	struct inode *inode = file_inode(iocb->ki_filp);
 	ssize_t ret;
@@ -49,7 +50,7 @@ static ssize_t ext4_dax_read_iter(struct kiocb *iocb, struct iov_iter *to)
 	if (!IS_DAX(inode)) {
 		inode_unlock_shared(inode);
 		/* Fallback to buffered IO in case we cannot support DAX */
-		return generic_file_read_iter(iocb, to);
+		return generic_file_read_iter(iocb, to, rwf);
 	}
 	ret = dax_iomap_rw(iocb, to, &ext4_iomap_ops);
 	inode_unlock_shared(inode);
@@ -59,7 +60,8 @@ static ssize_t ext4_dax_read_iter(struct kiocb *iocb, struct iov_iter *to)
 }
 #endif
 
-static ssize_t ext4_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
+static ssize_t ext4_file_read_iter(struct kiocb *iocb, struct iov_iter *to,
+				   bool rwf)
 {
 	if (unlikely(ext4_forced_shutdown(EXT4_SB(file_inode(iocb->ki_filp)->i_sb))))
 		return -EIO;
@@ -69,9 +71,9 @@ static ssize_t ext4_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 
 #ifdef CONFIG_FS_DAX
 	if (IS_DAX(file_inode(iocb->ki_filp)))
-		return ext4_dax_read_iter(iocb, to);
+		return ext4_dax_read_iter(iocb, to, rwf);
 #endif
-	return generic_file_read_iter(iocb, to);
+	return generic_file_read_iter(iocb, to, rwf);
 }
 
 /*

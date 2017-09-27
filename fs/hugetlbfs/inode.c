@@ -248,7 +248,8 @@ hugetlbfs_read_actor(struct page *page, unsigned long offset,
  * data. Its *very* similar to do_generic_mapping_read(), we can't use that
  * since it has PAGE_SIZE assumptions.
  */
-static ssize_t hugetlbfs_read_iter(struct kiocb *iocb, struct iov_iter *to)
+static ssize_t hugetlbfs_read_iter(struct kiocb *iocb, struct iov_iter *to,
+				   bool rwf)
 {
 	struct file *file = iocb->ki_filp;
 	struct hstate *h = hstate_file(file);

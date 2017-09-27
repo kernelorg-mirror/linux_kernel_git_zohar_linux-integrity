@@ -294,7 +294,8 @@ static int ashmem_release(struct inode *ignored, struct file *file)
 	return 0;
 }
 
-static ssize_t ashmem_read_iter(struct kiocb *iocb, struct iov_iter *iter)
+static ssize_t ashmem_read_iter(struct kiocb *iocb, struct iov_iter *iter,
+				bool rwf)
 {
 	struct ashmem_area *asma = iocb->ki_filp->private_data;
 	int ret = 0;

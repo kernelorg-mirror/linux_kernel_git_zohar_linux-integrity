@@ -98,7 +98,7 @@ out:
 }
 
 static ssize_t
-ncp_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
+ncp_file_read_iter(struct kiocb *iocb, struct iov_iter *to, bool rwf)
 {
 	struct file *file = iocb->ki_filp;
 	struct inode *inode = file_inode(file);

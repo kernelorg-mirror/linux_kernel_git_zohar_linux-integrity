@@ -1153,7 +1153,8 @@ out:
  *
  * Hmm, the sync read case isn't actually async... should it be?
  */
-static ssize_t ceph_read_iter(struct kiocb *iocb, struct iov_iter *to)
+static ssize_t ceph_read_iter(struct kiocb *iocb, struct iov_iter *to,
+			      bool rwf)
 {
 	struct file *filp = iocb->ki_filp;
 	struct ceph_file_info *fi = filp->private_data;
@@ -1202,7 +1203,7 @@ again:
 		     inode, ceph_vinop(inode), iocb->ki_pos, (unsigned)len,
 		     ceph_cap_string(got));
 		current->journal_info = filp;
-		ret = generic_file_read_iter(iocb, to);
+		ret = generic_file_read_iter(iocb, to, rwf);
 		current->journal_info = NULL;
 	}
 	dout("aio_read %p %llx.%llx dropping cap refs on %s = %d\n",

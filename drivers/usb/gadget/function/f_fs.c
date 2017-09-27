@@ -1123,7 +1123,8 @@ static ssize_t ffs_epfile_write_iter(struct kiocb *kiocb, struct iov_iter *from)
 	return res;
 }
 
-static ssize_t ffs_epfile_read_iter(struct kiocb *kiocb, struct iov_iter *to)
+static ssize_t ffs_epfile_read_iter(struct kiocb *kiocb, struct iov_iter *to,
+				    bool rwf)
 {
 	struct ffs_io_data io_data, *p = &io_data;
 	ssize_t res;

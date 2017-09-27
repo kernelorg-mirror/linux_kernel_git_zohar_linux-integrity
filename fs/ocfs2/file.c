@@ -2345,7 +2345,8 @@ out_mutex:
 }
 
 static ssize_t ocfs2_file_read_iter(struct kiocb *iocb,
-				   struct iov_iter *to)
+				    struct iov_iter *to,
+				    bool rwf)
 {
 	int ret = 0, rw_level = -1, lock_level = 0;
 	struct file *filp = iocb->ki_filp;
@@ -2395,7 +2396,7 @@ static ssize_t ocfs2_file_read_iter(struct kiocb *iocb,
 	}
 	ocfs2_inode_unlock(inode, lock_level);
 
-	ret = generic_file_read_iter(iocb, to);
+	ret = generic_file_read_iter(iocb, to, rwf);
 	trace_generic_file_aio_read_ret(ret);
 
 	/* buffered aio wouldn't have proper lock coverage today */

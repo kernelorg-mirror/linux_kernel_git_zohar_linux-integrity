@@ -27,7 +27,7 @@
 #include "coda_int.h"
 
 static ssize_t
-coda_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
+coda_file_read_iter(struct kiocb *iocb, struct iov_iter *to, bool rwf)
 {
 	struct file *coda_file = iocb->ki_filp;
 	struct coda_file_info *cfi = CODA_FTOC(coda_file);

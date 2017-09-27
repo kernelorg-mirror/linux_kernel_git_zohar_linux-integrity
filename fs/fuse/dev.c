@@ -1331,7 +1331,8 @@ static int fuse_dev_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static ssize_t fuse_dev_read(struct kiocb *iocb, struct iov_iter *to)
+static ssize_t fuse_dev_read(struct kiocb *iocb, struct iov_iter *to,
+			     bool rwf)
 {
 	struct fuse_copy_state cs;
 	struct file *file = iocb->ki_filp;

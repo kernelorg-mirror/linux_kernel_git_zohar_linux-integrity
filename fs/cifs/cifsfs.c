@@ -765,19 +765,19 @@ out_nls:
 }
 
 static ssize_t
-cifs_loose_read_iter(struct kiocb *iocb, struct iov_iter *iter)
+cifs_loose_read_iter(struct kiocb *iocb, struct iov_iter *iter, bool rwf)
 {
 	ssize_t rc;
 	struct inode *inode = file_inode(iocb->ki_filp);
 
 	if (iocb->ki_filp->f_flags & O_DIRECT)
-		return cifs_user_readv(iocb, iter);
+		return cifs_user_readv(iocb, iter, rwf);
 
 	rc = cifs_revalidate_mapping(inode);
 	if (rc)
 		return rc;
 
-	return generic_file_read_iter(iocb, iter);
+	return generic_file_read_iter(iocb, iter, rwf);
 }
 
 static ssize_t cifs_file_write_iter(struct kiocb *iocb, struct iov_iter *from)

@@ -1150,7 +1150,8 @@ out:
 	return result > 0 ? result : rc;
 }
 
-static ssize_t ll_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
+static ssize_t ll_file_read_iter(struct kiocb *iocb, struct iov_iter *to,
+				 bool rwf)
 {
 	struct lu_env      *env;
 	struct vvp_io_args *args;

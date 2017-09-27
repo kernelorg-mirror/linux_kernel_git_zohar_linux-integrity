@@ -88,7 +88,8 @@ static struct list_head *cuse_conntbl_head(dev_t devt)
  * FUSE file.
  */
 
-static ssize_t cuse_read_iter(struct kiocb *kiocb, struct iov_iter *to)
+static ssize_t cuse_read_iter(struct kiocb *kiocb, struct iov_iter *to,
+			      bool rwf)
 {
 	struct fuse_io_priv io = FUSE_IO_PRIV_SYNC(kiocb);
 	loff_t pos = 0;

@@ -2406,7 +2406,8 @@ shmem_write_end(struct file *file, struct address_space *mapping,
 	return copied;
 }
 
-static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
+static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to,
+				    bool rwf)
 {
 	struct file *file = iocb->ki_filp;
 	struct inode *inode = file_inode(file);

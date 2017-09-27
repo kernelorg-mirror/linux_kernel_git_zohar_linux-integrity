@@ -203,7 +203,8 @@ xfs_file_fsync(
 STATIC ssize_t
 xfs_file_dio_aio_read(
 	struct kiocb		*iocb,
-	struct iov_iter		*to)
+	struct iov_iter		*to,
+	bool			rwf)
 {
 	struct xfs_inode	*ip = XFS_I(file_inode(iocb->ki_filp));
 	size_t			count = iov_iter_count(to);
@@ -226,7 +227,8 @@ xfs_file_dio_aio_read(
 static noinline ssize_t
 xfs_file_dax_read(
 	struct kiocb		*iocb,
-	struct iov_iter		*to)
+	struct iov_iter		*to,
+	bool			rwf)
 {
 	struct xfs_inode	*ip = XFS_I(iocb->ki_filp->f_mapping->host);
 	size_t			count = iov_iter_count(to);
@@ -252,7 +254,8 @@ xfs_file_dax_read(
 STATIC ssize_t
 xfs_file_buffered_aio_read(
 	struct kiocb		*iocb,
-	struct iov_iter		*to)
+	struct iov_iter		*to,
+	bool			rwf)
 {
 	struct xfs_inode	*ip = XFS_I(file_inode(iocb->ki_filp));
 	ssize_t			ret;
@@ -264,7 +267,7 @@ xfs_file_buffered_aio_read(
 			return -EAGAIN;
 		xfs_ilock(ip, XFS_IOLOCK_SHARED);
 	}
-	ret = generic_file_read_iter(iocb, to);
+	ret = generic_file_read_iter(iocb, to, rwf);
 	xfs_iunlock(ip, XFS_IOLOCK_SHARED);
 
 	return ret;
@@ -273,7 +276,8 @@ xfs_file_buffered_aio_read(
 STATIC ssize_t
 xfs_file_read_iter(
 	struct kiocb		*iocb,
-	struct iov_iter		*to)
+	struct iov_iter		*to,
+	bool			rwf)
 {
 	struct inode		*inode = file_inode(iocb->ki_filp);
 	struct xfs_mount	*mp = XFS_I(inode)->i_mount;
@@ -285,11 +289,11 @@ xfs_file_read_iter(
 		return -EIO;
 
 	if (IS_DAX(inode))
-		ret = xfs_file_dax_read(iocb, to);
+		ret = xfs_file_dax_read(iocb, to, rwf);
 	else if (iocb->ki_flags & IOCB_DIRECT)
-		ret = xfs_file_dio_aio_read(iocb, to);
+		ret = xfs_file_dio_aio_read(iocb, to, rwf);
 	else
-		ret = xfs_file_buffered_aio_read(iocb, to);
+		ret = xfs_file_buffered_aio_read(iocb, to, rwf);
 
 	if (ret > 0)
 		XFS_STATS_ADD(mp, xs_read_bytes, ret);

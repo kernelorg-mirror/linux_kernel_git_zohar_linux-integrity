@@ -913,7 +913,8 @@ out:
 	return err;
 }
 
-static ssize_t fuse_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
+static ssize_t fuse_file_read_iter(struct kiocb *iocb, struct iov_iter *to,
+				   bool rwf)
 {
 	struct inode *inode = iocb->ki_filp->f_mapping->host;
 	struct fuse_conn *fc = get_fuse_conn(inode);
@@ -931,7 +932,7 @@ static ssize_t fuse_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 			return err;
 	}
 
-	return generic_file_read_iter(iocb, to);
+	return generic_file_read_iter(iocb, to, rwf);
 }
 
 static void fuse_write_fill(struct fuse_req *req, struct fuse_file *ff,
@@ -1421,7 +1422,8 @@ static ssize_t __fuse_direct_read(struct fuse_io_priv *io,
 	return res;
 }
 
-static ssize_t fuse_direct_read_iter(struct kiocb *iocb, struct iov_iter *to)
+static ssize_t fuse_direct_read_iter(struct kiocb *iocb, struct iov_iter *to,
+				     bool rwf)
 {
 	struct fuse_io_priv io = FUSE_IO_PRIV_SYNC(iocb);
 	return __fuse_direct_read(&io, to, &iocb->ki_pos);

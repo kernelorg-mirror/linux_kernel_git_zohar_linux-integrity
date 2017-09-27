@@ -2185,12 +2185,13 @@ out:
  * generic_file_read_iter - generic filesystem read routine
  * @iocb:	kernel I/O control block
  * @iter:	destination for the data read
+ * @rwf:	i_rwsem taken exclusively
  *
  * This is the "read_iter()" routine for all filesystems
  * that can use the page cache directly.
  */
 ssize_t
-generic_file_read_iter(struct kiocb *iocb, struct iov_iter *iter)
+generic_file_read_iter(struct kiocb *iocb, struct iov_iter *iter, bool rwf)
 {
 	size_t count = iov_iter_count(iter);
 	ssize_t retval = 0;

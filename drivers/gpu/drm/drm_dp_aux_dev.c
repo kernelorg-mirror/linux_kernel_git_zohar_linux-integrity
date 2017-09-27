@@ -141,7 +141,8 @@ static loff_t auxdev_llseek(struct file *file, loff_t offset, int whence)
 	return fixed_size_llseek(file, offset, whence, AUX_MAX_OFFSET);
 }
 
-static ssize_t auxdev_read_iter(struct kiocb *iocb, struct iov_iter *to)
+static ssize_t auxdev_read_iter(struct kiocb *iocb, struct iov_iter *to,
+				bool rwf)
 {
 	struct drm_dp_aux_dev *aux_dev = iocb->ki_filp->private_data;
 	loff_t pos = iocb->ki_pos;

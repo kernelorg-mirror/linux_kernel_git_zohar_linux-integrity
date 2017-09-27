@@ -3061,7 +3061,7 @@ static ssize_t snd_pcm_write(struct file *file, const char __user *buf,
 	return result;
 }
 
-static ssize_t snd_pcm_readv(struct kiocb *iocb, struct iov_iter *to)
+static ssize_t snd_pcm_readv(struct kiocb *iocb, struct iov_iter *to, bool rwf)
 {
 	struct snd_pcm_file *pcm_file;
 	struct snd_pcm_substream *substream;

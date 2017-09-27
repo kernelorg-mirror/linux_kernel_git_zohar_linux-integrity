@@ -869,7 +869,8 @@ put:
 	return ret;
 }
 
-static ssize_t tap_read_iter(struct kiocb *iocb, struct iov_iter *to)
+static ssize_t tap_read_iter(struct kiocb *iocb, struct iov_iter *to,
+			     bool rwf)
 {
 	struct file *file = iocb->ki_filp;
 	struct tap_queue *q = file->private_data;

@@ -539,7 +539,7 @@ static int lo_rw_aio(struct loop_device *lo, struct loop_cmd *cmd,
 	if (rw == WRITE)
 		ret = call_write_iter(file, &cmd->iocb, &iter);
 	else
-		ret = call_read_iter(file, &cmd->iocb, &iter);
+		ret = call_read_iter(file, &cmd->iocb, &iter, 0);
 
 	lo_rw_aio_do_completion(cmd);
 

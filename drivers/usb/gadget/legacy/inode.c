@@ -572,7 +572,7 @@ fail:
 }
 
 static ssize_t
-ep_read_iter(struct kiocb *iocb, struct iov_iter *to)
+ep_read_iter(struct kiocb *iocb, struct iov_iter *to, bool rwf)
 {
 	struct file *file = iocb->ki_filp;
 	struct ep_data *epdata = file->private_data;

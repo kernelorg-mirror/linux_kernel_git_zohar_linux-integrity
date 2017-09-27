@@ -368,7 +368,7 @@ int nfs_rename(struct inode *, struct dentry *,
 /* file.c */
 int nfs_file_fsync(struct file *file, loff_t start, loff_t end, int datasync);
 loff_t nfs_file_llseek(struct file *, loff_t, int);
-ssize_t nfs_file_read(struct kiocb *, struct iov_iter *);
+ssize_t nfs_file_read(struct kiocb *, struct iov_iter *, bool rwf);
 int nfs_file_mmap(struct file *, struct vm_area_struct *);
 ssize_t nfs_file_write(struct kiocb *, struct iov_iter *);
 int nfs_file_release(struct inode *, struct file *);

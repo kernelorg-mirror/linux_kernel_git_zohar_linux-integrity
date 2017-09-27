@@ -375,11 +375,12 @@ out_err:
  * @udata: user data buffer to read data into
  * @count: size of buffer
  * @offset: offset at which to read data
+ * @rwf: i_rwsem taken exclusively
  *
  */
 
 static ssize_t
-v9fs_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
+v9fs_file_read_iter(struct kiocb *iocb, struct iov_iter *to, bool rwf)
 {
 	struct p9_fid *fid = iocb->ki_filp->private_data;
 	int ret, err = 0;
@@ -569,13 +570,14 @@ out_unlock:
  * @data: user data buffer to read data into
  * @count: size of buffer
  * @offset: offset at which to read data
+ * @rwf: i_rwsem taken exclusively
  *
  */
 static ssize_t
-v9fs_mmap_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
+v9fs_mmap_file_read_iter(struct kiocb *iocb, struct iov_iter *to, bool rwf)
 {
 	/* TODO: Check if there are dirty pages */
-	return v9fs_file_read_iter(iocb, to);
+	return v9fs_file_read_iter(iocb, to, rwf);
 }
 
 /**

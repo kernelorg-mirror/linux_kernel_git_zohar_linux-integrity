@@ -151,7 +151,7 @@ nfs_file_flush(struct file *file, fl_owner_t id)
 }
 
 ssize_t
-nfs_file_read(struct kiocb *iocb, struct iov_iter *to)
+nfs_file_read(struct kiocb *iocb, struct iov_iter *to, bool rwf)
 {
 	struct inode *inode = file_inode(iocb->ki_filp);
 	ssize_t result;
@@ -166,7 +166,7 @@ nfs_file_read(struct kiocb *iocb, struct iov_iter *to)
 	nfs_start_io_read(inode);
 	result = nfs_revalidate_mapping(inode, iocb->ki_filp->f_mapping);
 	if (!result) {
-		result = generic_file_read_iter(iocb, to);
+		result = generic_file_read_iter(iocb, to, rwf);
 		if (result > 0)
 			nfs_add_stats(inode, NFSIOS_NORMALREADBYTES, result);
 	}

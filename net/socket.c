@@ -113,7 +113,7 @@ unsigned int sysctl_net_busy_read __read_mostly;
 unsigned int sysctl_net_busy_poll __read_mostly;
 #endif
 
-static ssize_t sock_read_iter(struct kiocb *iocb, struct iov_iter *to);
+static ssize_t sock_read_iter(struct kiocb *iocb, struct iov_iter *to, bool rwf);
 static ssize_t sock_write_iter(struct kiocb *iocb, struct iov_iter *from);
 static int sock_mmap(struct file *file, struct vm_area_struct *vma);
 
@@ -870,7 +870,7 @@ static ssize_t sock_splice_read(struct file *file, loff_t *ppos,
 	return sock->ops->splice_read(sock, ppos, pipe, len, flags);
 }
 
-static ssize_t sock_read_iter(struct kiocb *iocb, struct iov_iter *to)
+static ssize_t sock_read_iter(struct kiocb *iocb, struct iov_iter *to, bool rwf)
 {
 	struct file *file = iocb->ki_filp;
 	struct socket *sock = file->private_data;

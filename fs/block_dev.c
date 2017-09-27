@@ -1908,7 +1908,7 @@ ssize_t blkdev_write_iter(struct kiocb *iocb, struct iov_iter *from)
 }
 EXPORT_SYMBOL_GPL(blkdev_write_iter);
 
-ssize_t blkdev_read_iter(struct kiocb *iocb, struct iov_iter *to)
+ssize_t blkdev_read_iter(struct kiocb *iocb, struct iov_iter *to, bool rwf)
 {
 	struct file *file = iocb->ki_filp;
 	struct inode *bd_inode = bdev_file_inode(file);
@@ -1920,7 +1920,7 @@ ssize_t blkdev_read_iter(struct kiocb *iocb, struct iov_iter *to)
 
 	size -= pos;
 	iov_iter_truncate(to, size);
-	return generic_file_read_iter(iocb, to);
+	return generic_file_read_iter(iocb, to, rwf);
 }
 EXPORT_SYMBOL_GPL(blkdev_read_iter);
 
