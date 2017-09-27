@@ -38,7 +38,7 @@ static ssize_t ext4_dax_read_iter(struct kiocb *iocb, struct iov_iter *to,
 	struct inode *inode = file_inode(iocb->ki_filp);
 	ssize_t ret;
 
-	if (!inode_trylock_shared(inode)) {
+	if (!rwf && !inode_trylock_shared(inode)) {
 		if (iocb->ki_flags & IOCB_NOWAIT)
 			return -EAGAIN;
 		inode_lock_shared(inode);
@@ -48,12 +48,14 @@ static ssize_t ext4_dax_read_iter(struct kiocb *iocb, struct iov_iter *to,
 	 * change anymore
 	 */
 	if (!IS_DAX(inode)) {
-		inode_unlock_shared(inode);
+		if (!rwf)
+			inode_unlock_shared(inode);
 		/* Fallback to buffered IO in case we cannot support DAX */
 		return generic_file_read_iter(iocb, to, rwf);
 	}
 	ret = dax_iomap_rw(iocb, to, &ext4_iomap_ops);
-	inode_unlock_shared(inode);
+	if (!rwf)
+		inode_unlock_shared(inode);
 
 	file_accessed(iocb->ki_filp);
 	return ret;

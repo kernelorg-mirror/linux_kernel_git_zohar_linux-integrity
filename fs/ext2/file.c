@@ -38,9 +38,11 @@ static ssize_t ext2_dax_read_iter(struct kiocb *iocb, struct iov_iter *to,
 	if (!iov_iter_count(to))
 		return 0; /* skip atime */
 
-	inode_lock_shared(inode);
+	if (!rwf)
+		inode_lock_shared(inode);
 	ret = dax_iomap_rw(iocb, to, &ext2_iomap_ops);
-	inode_unlock_shared(inode);
+	if (!rwf)
+		inode_unlock_shared(inode);
 
 	file_accessed(iocb->ki_filp);
 	return ret;
