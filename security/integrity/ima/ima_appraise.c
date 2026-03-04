@@ -257,8 +257,10 @@ static int calc_file_id_hash(enum evm_ima_xattr_type type,
 		.hash_type = IMA_VERITY_DIGSIG, .hash_algorithm = algo};
 	unsigned int unused = HASH_MAX_DIGESTSIZE - hash_digest_size[algo];
 
-	if (type != IMA_VERITY_DIGSIG)
+	if (type != IMA_VERITY_DIGSIG && type != EVM_IMA_XATTR_DIGSIG)
 		return -EINVAL;
+
+	file_id.hash_type = type;
 
 	memcpy(file_id.hash, digest, hash_digest_size[algo]);
 
@@ -284,7 +286,7 @@ static int xattr_verify_sigv3(enum ima_hooks func, struct ima_iint_cache *iint,
 		return -EINVAL;
 	}
 
-	rc = calc_file_id_hash(IMA_VERITY_DIGSIG, iint->ima_hash->algo,
+	rc = calc_file_id_hash(xattr_value->type, iint->ima_hash->algo,
 			       iint->ima_hash->digest,
 			       container_of(&hash.hdr, struct ima_digest_data,
 					    hdr));
@@ -403,13 +405,18 @@ static int xattr_verify(enum ima_hooks func, struct ima_iint_cache *iint,
 		}
 
 		sig = (typeof(sig))xattr_value;
-		if (sig->version >= 3) {
+		if (sig->version > 3) {
 			*cause = "invalid-signature-version";
 			*status = INTEGRITY_FAIL;
 			break;
 		}
-		rc = xattr_verify_sigv2(func, iint, xattr_value, xattr_len,
-					status, cause);
+
+		if (sig->version == 3)
+			rc = xattr_verify_sigv3(func, iint, xattr_value,
+						xattr_len, status, cause);
+		else
+			rc = xattr_verify_sigv2(func, iint, xattr_value,
+						xattr_len, status, cause);
 		break;
 	case IMA_VERITY_DIGSIG:
 		set_bit(IMA_DIGSIG, &iint->atomic_flags);
