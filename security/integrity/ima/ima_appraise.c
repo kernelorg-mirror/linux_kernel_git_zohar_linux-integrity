@@ -268,6 +268,78 @@ static int calc_file_id_hash(enum evm_ima_xattr_type type,
 	return ima_calc_buffer_hash(&file_id, sizeof(file_id) - unused, hash);
 }
 
+static int xattr_verify_sigv3(enum ima_hooks func, struct ima_iint_cache *iint,
+			      struct evm_ima_xattr_data *xattr_value,
+			      int xattr_len, enum integrity_status *status,
+			      const char **cause)
+{
+	struct ima_max_digest_data hash;
+	struct signature_v2_hdr *sig;
+	int rc = -EINVAL;
+
+	sig = (typeof(sig))xattr_value;
+	if (sig->version != 3) {
+		*cause = "invalid-signature-version";
+		*status = INTEGRITY_FAIL;
+		return -EINVAL;
+	}
+
+	rc = calc_file_id_hash(IMA_VERITY_DIGSIG, iint->ima_hash->algo,
+			       iint->ima_hash->digest,
+			       container_of(&hash.hdr, struct ima_digest_data,
+					    hdr));
+	if (rc) {
+		*cause = "sigv3-hashing-error";
+		*status = INTEGRITY_FAIL;
+		return -EINVAL;
+	}
+
+	rc = integrity_digsig_verify(INTEGRITY_KEYRING_IMA,
+				     (const char *)xattr_value,
+				     xattr_len, hash.digest,
+				     hash.hdr.length);
+	if (rc) {
+		*cause = "invalid-verity-signature";
+		*status = INTEGRITY_FAIL;
+	} else {
+		*status = INTEGRITY_PASS;
+	}
+
+	return rc;
+}
+
+static int xattr_verify_sigv2(enum ima_hooks func, struct ima_iint_cache *iint,
+			      struct evm_ima_xattr_data *xattr_value,
+			      int xattr_len, enum integrity_status *status,
+			      const char **cause)
+{
+	int rc = -EINVAL;
+
+	rc = integrity_digsig_verify(INTEGRITY_KEYRING_IMA,
+				     (const char *)xattr_value,
+				     xattr_len,
+				     iint->ima_hash->digest,
+				     iint->ima_hash->length);
+	if (rc == -EOPNOTSUPP) {
+		*status = INTEGRITY_UNKNOWN;
+		return -EOPNOTSUPP;
+	}
+	if (IS_ENABLED(CONFIG_INTEGRITY_PLATFORM_KEYRING) && rc &&
+	    func == KEXEC_KERNEL_CHECK)
+		rc = integrity_digsig_verify(INTEGRITY_KEYRING_PLATFORM,
+					     (const char *)xattr_value,
+					     xattr_len,
+					     iint->ima_hash->digest,
+					     iint->ima_hash->length);
+	if (rc) {
+		*cause = "invalid-signature";
+		*status = INTEGRITY_FAIL;
+	} else {
+		*status = INTEGRITY_PASS;
+	}
+	return rc;
+}
+
 /*
  * xattr_verify - verify xattr digest or signature
  *
@@ -279,7 +351,6 @@ static int xattr_verify(enum ima_hooks func, struct ima_iint_cache *iint,
 			struct evm_ima_xattr_data *xattr_value, int xattr_len,
 			enum integrity_status *status, const char **cause)
 {
-	struct ima_max_digest_data hash;
 	struct signature_v2_hdr *sig;
 	int rc = -EINVAL, hash_start = 0;
 	int mask;
@@ -337,28 +408,8 @@ static int xattr_verify(enum ima_hooks func, struct ima_iint_cache *iint,
 			*status = INTEGRITY_FAIL;
 			break;
 		}
-		rc = integrity_digsig_verify(INTEGRITY_KEYRING_IMA,
-					     (const char *)xattr_value,
-					     xattr_len,
-					     iint->ima_hash->digest,
-					     iint->ima_hash->length);
-		if (rc == -EOPNOTSUPP) {
-			*status = INTEGRITY_UNKNOWN;
-			break;
-		}
-		if (IS_ENABLED(CONFIG_INTEGRITY_PLATFORM_KEYRING) && rc &&
-		    func == KEXEC_KERNEL_CHECK)
-			rc = integrity_digsig_verify(INTEGRITY_KEYRING_PLATFORM,
-						     (const char *)xattr_value,
-						     xattr_len,
-						     iint->ima_hash->digest,
-						     iint->ima_hash->length);
-		if (rc) {
-			*cause = "invalid-signature";
-			*status = INTEGRITY_FAIL;
-		} else {
-			*status = INTEGRITY_PASS;
-		}
+		rc = xattr_verify_sigv2(func, iint, xattr_value, xattr_len,
+					status, cause);
 		break;
 	case IMA_VERITY_DIGSIG:
 		set_bit(IMA_DIGSIG, &iint->atomic_flags);
@@ -371,34 +422,8 @@ static int xattr_verify(enum ima_hooks func, struct ima_iint_cache *iint,
 			}
 		}
 
-		sig = (typeof(sig))xattr_value;
-		if (sig->version != 3) {
-			*cause = "invalid-signature-version";
-			*status = INTEGRITY_FAIL;
-			break;
-		}
-
-		rc = calc_file_id_hash(IMA_VERITY_DIGSIG, iint->ima_hash->algo,
-				       iint->ima_hash->digest,
-				       container_of(&hash.hdr,
-					       struct ima_digest_data, hdr));
-		if (rc) {
-			*cause = "sigv3-hashing-error";
-			*status = INTEGRITY_FAIL;
-			break;
-		}
-
-		rc = integrity_digsig_verify(INTEGRITY_KEYRING_IMA,
-					     (const char *)xattr_value,
-					     xattr_len, hash.digest,
-					     hash.hdr.length);
-		if (rc) {
-			*cause = "invalid-verity-signature";
-			*status = INTEGRITY_FAIL;
-		} else {
-			*status = INTEGRITY_PASS;
-		}
-
+		rc = xattr_verify_sigv3(func, iint, xattr_value, xattr_len,
+					status, cause);
 		break;
 	default:
 		*status = INTEGRITY_UNKNOWN;
