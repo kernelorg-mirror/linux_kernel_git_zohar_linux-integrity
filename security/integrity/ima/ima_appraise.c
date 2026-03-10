@@ -411,12 +411,18 @@ static int xattr_verify(enum ima_hooks func, struct ima_iint_cache *iint,
 			break;
 		}
 
-		if (sig->version == 3)
+		if (sig->version == 3) {
 			rc = xattr_verify_sigv3(func, iint, xattr_value,
 						xattr_len, status, cause);
-		else
+		} else {
+			if (iint->flags & IMA_SIGV3_REQUIRED) {
+				*cause = "IMA-sigv3-required";
+				*status = INTEGRITY_FAIL;
+				break;
+			}
 			rc = xattr_verify_sigv2(func, iint, xattr_value,
 						xattr_len, status, cause);
+		}
 		break;
 	case IMA_VERITY_DIGSIG:
 		set_bit(IMA_DIGSIG, &iint->atomic_flags);
