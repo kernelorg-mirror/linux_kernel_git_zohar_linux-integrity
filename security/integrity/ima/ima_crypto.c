@@ -233,6 +233,9 @@ static int ima_calc_file_hash_tfm(struct file *file,
 		rc = crypto_shash_update(shash, rbuf, rbuf_len);
 		if (rc)
 			break;
+
+		if (IS_ALIGNED(offset, SZ_4M))
+			cond_resched();
 	}
 	kfree(rbuf);
 out:
